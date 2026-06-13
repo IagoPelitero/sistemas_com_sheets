@@ -149,18 +149,20 @@ function salvarRetencao(form) {
     const sheet = ss.getSheetByName('Dados');
     const user = getUserInfo();
     
-    const hoje = new Date();
+    // A data agora vem do formulário, com um fallback para a data atual se não for enviada
+    const dataAtendimento = form.dataAtendimento ? new Date(form.dataAtendimento) : new Date();
     
-    // Estrutura: [Data, Email, Nome, Supervisor, Tipo, Sub, Res, Status]
+    // Estrutura: [Data, Email, Nome, Supervisor, Tipo, Sub, Res, Status, Observacao]
     sheet.appendRow([
-      hoje, 
+      dataAtendimento, 
       user.email, 
       user.nome,
       user.supervisor || '-',
       form.tipo,
       form.subProduto || '-',
       form.resultado,
-      'Ativo'
+      'Ativo',
+      form.observacao || '' // Adiciona a observação (ou string vazia)
     ]);
     
     return "Registro salvo com sucesso!";
@@ -243,18 +245,21 @@ function getDashboardData() {
   // 1. Dados Pessoais
   const meusDados = rows.filter(row => row[1] === user.email);
   const statsPessoal = processarEstatisticas(meusDados);
+  const comissaoPessoal = calcularComissoes(statsPessoal);
 
   // 2. Dados da Equipe (Se tiver supervisor)
   let statsEquipe = null;
+  let comissaoEquipe = null;
   if (user.supervisor && user.supervisor !== '-') {
      // Filtra todos os registros onde a coluna Supervisor (índice 3) bate com o sup do usuário
      const dadosEquipe = rows.filter(row => row[3] === user.supervisor);
      statsEquipe = processarEstatisticas(dadosEquipe);
+     comissaoEquipe = calcularComissoes(statsEquipe);
   }
 
   return {
-    pessoal: statsPessoal,
-    equipe: statsEquipe
+    pessoal: { stats: statsPessoal, comissao: comissaoPessoal },
+    equipe: statsEquipe ? { stats: statsEquipe, comissao: comissaoEquipe } : null
   };
 }
 
@@ -322,112 +327,223 @@ function processarEstatisticas(rows) {
   return stats;
 }
 
+// =======================================================================================
+// ======================= FUNÇÃO CENTRAL DE CÁLCULO DE COMISSÃO =======================
+// =======================================================================================
+//  TODA A LÓGICA DE COMISSIONAMENTO ESTÁ AQUI. 
+//  Para alterar valores, metas ou regras de bônus, modifique esta função.
+//  Ela recebe as estatísticas de um usuário ou equipe e retorna um objeto com os valores de comissão.
+// =======================================================================================
+function calcularComissoes(stats) {
+    const calcPct = (num, den) => (den && den > 0) ? (num / den) * 100 : 0;
+    
+    let comissao = { cc: 0, cd: 0, cashback: 0, massificado: 0, total: 0 };
+    let valorCashback = 0;
+
+    // --- 1. CARTÃO DE CRÉDITO ---
+    const totalCC = stats.cartao.retidoTotal + stats.cartao.cancelado; // Base de cálculo: atendimentos finalizados
+    const retidoCC = stats.cartao.retidoTotal;
+    const argCC = stats.cartao.retidoArg;
+
+    const pctCC = calcPct(retidoCC, totalCC);
+    const pctArg = calcPct(argCC, retidoCC);
+
+    let comissaoCC = 0, comissaoArg = 0, bonusCC = 0;
+
+    // Lógica por atingimento de % de Retenção
+    if (pctCC >= 75) comissaoCC = 200; 
+    else if (pctCC >= 74) comissaoCC = 180; 
+    else if (pctCC >= 73) comissaoCC = 150;
+    
+    // Lógica por atingimento de % de Argumentação (só paga se a retenção mínima for atingida)
+    if (pctCC >= 73) {
+        if (pctArg >= 40) comissaoArg = 200; 
+        else if (pctArg >= 38) comissaoArg = 150; 
+        else if (pctArg >= 35) comissaoArg = 100;
+    }
+    
+    if (pctCC >= 78 && pctArg >= 44) bonusCC = 200; 
+    else if (pctCC >= 75 && pctArg >= 42) bonusCC = 100; 
+
+    comissao.cc = comissaoCC + comissaoArg + bonusCC;
+
+    // --- 2. CONTA DIGITAL ---
+    const totalCD = stats.conta.retido + stats.conta.cancelado; // Base de cálculo: atendimentos finalizados
+    const pctConta = calcPct(stats.conta.retido, totalCD); 
+    
+    let comissaoConta = 0, bonusConta = 0; 
+    if (pctConta >= 75) comissaoConta = 200; 
+    else if (pctConta >= 50) comissaoConta = 150; 
+    else if (pctConta >= 30) comissaoConta = 100; 
+    
+    if (pctConta >= 78) bonusConta = 150; 
+    else if (pctConta >= 76) bonusConta = 100;
+
+    comissao.cd = comissaoConta + bonusConta;
+
+    // --- 3. CASHBACK ---
+    const qtdCashback = stats.pontos.cashback || 0; // Quantidade absoluta
+    const qtdMilhas = stats.pontos.milhas || 0
+    const totalTrocas = qtdCashback + qtdMilhas;
+    
+    const pctCashback = calcPct(qtdCashback, totalTrocas);
+
+    if (pctCashback >= 45) valorCashback = 130;
+    else if (pctCashback >= 42) valorCashback = 100;
+    else if (pctCashback >= 39) valorCashback = 70;
+    else if (pctCashback >= 36) valorCashback = 50;
+    
+    comissao.cashback = valorCashback;
+
+    // --- 4. MASSIFICADOS ---
+    // Esta é a lógica de comissão "por retenção".
+    // O valor pago por cada retenção (vArg, vInc) depende da % de performance do produto.
+    const listaPadrao = ["SPPR / Bolsa Protegida", "Adicional", "Acidentes Pessoais", "Identidade protegida", "Seguro RE", "Martelinho de Ouro", "Quitação fatura"];
+    let totalMass = 0;
+
+    listaPadrao.forEach(nome => {
+        const p = stats.massificado[nome] || { arg: 0, troca: 0, canc: 0 };
+        const pTotal = p.arg + p.troca + p.canc; // Total do produto específico
+        const pPctArg = calcPct(p.arg, pTotal);
+        const pPctInc = calcPct(p.troca, pTotal);
+
+        // Define o valor a ser pago por CADA retenção em argumentação
+        let vArg = 0;
+        if (pPctArg >= 60) vArg = 3.00;
+        else if (pPctArg >= 50) vArg = 2.50;
+        else if (pPctArg >= 30) vArg = 2.00;
+        else if (pPctArg >= 15) vArg = 1.50;
+        totalMass += (p.arg * vArg);
+
+        // Define o valor a ser pago por CADA retenção em troca/incentivo
+        let vInc = 0;
+        if (pPctInc >= 75) vInc = 2.00;
+        else if (pPctInc >= 70) vInc = 1.50;
+        else if (pPctInc >= 65) vInc = 1.25;
+        else if (pPctInc >= 60) vInc = 1.00;
+        totalMass += (p.troca * vInc);
+    });
+    
+    comissao.massificado = totalMass;
+
+    // --- 5. TOTALIZAÇÃO ---
+    comissao.total = comissao.cc + comissao.cd + comissao.cashback + comissao.massificado;
+
+    return comissao;
+}
+
 function getSupervisorData(filtroEmail) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const wsUsers = ss.getSheetByName("Usuarios");
+    const emailLogado = Session.getActiveUser().getEmail();
+
+    const usersData = wsUsers.getRange(2, 1, wsUsers.getLastRow() - 1, 5).getValues();
+    const userLogado = usersData.find(u => u[0] === emailLogado);
+
+    if (!userLogado) return null;
+
+    const nomeSupervisor = userLogado[1] + ' ' + userLogado[2];
+    let equipeEmails = [];
+    let listaMembros = [];
+
+    if (userLogado[3] === 'ADM') {
+        equipeEmails = usersData.map(u => u[0]);
+        listaMembros = usersData.map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
+    } else if (userLogado[3] === 'Supervisor') {
+        const equipe = usersData.filter(u => u[4] === nomeSupervisor);
+        equipeEmails = equipe.map(u => u[0]);
+        listaMembros = equipe.map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
+        if (!equipeEmails.includes(emailLogado)) equipeEmails.push(emailLogado);
+    } else {
+        return null;
+    }
+
+    const wsDados = ss.getSheetByName("Dados");
+    const todosOsDados = wsDados.getDataRange().getValues();
+    todosOsDados.shift(); // Remove cabeçalho
+
+    // Filtra os dados relevantes para a equipe/usuário antes de processar
+    const dadosFiltrados = todosOsDados.filter(row => {
+        const emailAtendente = row[1];
+        if (!equipeEmails.includes(emailAtendente)) return false;
+        if (filtroEmail && emailAtendente !== filtroEmail) return false;
+        return true;
+    });
+
+    // Reutiliza a função de processamento para manter a consistência
+    const statsGeral = processarEstatisticas(dadosFiltrados);
+
+    // O objeto 'diario' foi removido daqui. O frontend agora usará a 'statsGeral.lista'
+    // para gerar os dados diários, evitando duplicação de lógica.
+    return { geral: statsGeral, equipe: listaMembros };
+}
+
+function getRankingData(periodo) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const wsDados = ss.getSheetByName("Dados");
   const wsUsers = ss.getSheetByName("Usuarios");
   const emailLogado = Session.getActiveUser().getEmail();
-  
-  const usersData = wsUsers.getRange(2, 1, wsUsers.getLastRow()-1, 5).getValues();
+
+  const usersData = wsUsers.getRange(2, 1, wsUsers.getLastRow() - 1, 5).getValues();
   const userLogado = usersData.find(u => u[0] === emailLogado);
-  
-  if (!userLogado) return null;
 
-  const nomeSupervisor = userLogado[1] + ' ' + userLogado[2]; 
-  let equipeEmails = [];
-  let listaMembros = []; 
-
-  if (userLogado[3] === 'ADM') {
-      equipeEmails = usersData.map(u => u[0]);
-      listaMembros = usersData.map(u => ({email: u[0], nome: u[1] + ' ' + u[2]}));
-  } else if (userLogado[3] === 'Supervisor') {
-      const equipe = usersData.filter(u => u[4] === nomeSupervisor);
-      equipeEmails = equipe.map(u => u[0]);
-      listaMembros = equipe.map(u => ({email: u[0], nome: u[1] + ' ' + u[2]}));
-      if(!equipeEmails.includes(emailLogado)) equipeEmails.push(emailLogado);
-  } else {
-      return null; 
+  if (!userLogado || (userLogado[3] !== 'Supervisor' && userLogado[3] !== 'ADM')) {
+    return []; // Retorna vazio se não for supervisor ou ADM
   }
 
-  const dados = wsDados.getDataRange().getValues();
-  dados.shift(); // Remove cabeçalho
-  
-  let stats = {
-    cartao: { total:0, retidoTotal:0, retidoArg:0, retidoInc:0, cancelado:0 }, // Adicionado retidoInc
-    conta:  { total:0, retido:0, cancelado:0 },
-    pontos: { cashback:0, milhas:0 },
-    massificado: {}
-  };
-  
-  let diario = {};
+  const nomeSupervisor = userLogado[1] + ' ' + userLogado[2];
+  let listaMembros = [];
 
-  dados.forEach(row => {
-    const dataReg = row[0]; 
-    const emailAtendente = row[1]; 
-    const tipo = row[4];
-    const sub = row[5];
-    const res = row[6];
+  if (userLogado[3] === 'ADM') {
+      listaMembros = usersData.map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
+  } else { // Supervisor
+      listaMembros = usersData
+        .filter(u => u[4] === nomeSupervisor)
+        .map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
+  }
 
-    if (!equipeEmails.includes(emailAtendente)) return;
-    if (filtroEmail && emailAtendente !== filtroEmail) return;
+  const wsDados = ss.getSheetByName("Dados");
+  const todosOsDados = wsDados.getDataRange().getValues();
+  todosOsDados.shift(); // Remove cabeçalho
 
-    let diaKey = "";
-    if (dataReg instanceof Date) {
-      diaKey = Utilities.formatDate(dataReg, Session.getScriptTimeZone(), "dd/MM/yyyy");
-    } else {
-      diaKey = String(dataReg).split(" ")[0]; 
-    }
+  let dadosFiltrados = todosOsDados;
+  const hoje = new Date();
 
-    if (!diario[diaKey]) {
-      diario[diaKey] = {
-        cc: { atendido:0, retido:0, retidoArg:0, canc:0 }, 
-        cd: { atendido:0, retido:0, canc:0 }
-      };
-    }
+  if (periodo === 'mensal') {
+    const inicioDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    dadosFiltrados = todosOsDados.filter(row => new Date(row[0]) >= inicioDoMes);
+  } else if (periodo === 'semanal') {
+    const seteDiasAtras = new Date();
+    seteDiasAtras.setHours(0, 0, 0, 0);
+    seteDiasAtras.setDate(hoje.getDate() - 7);
+    dadosFiltrados = todosOsDados.filter(row => new Date(row[0]) >= seteDiasAtras);
+  }
 
-    if (tipo === 'Cartão de Crédito') {
-        stats.cartao.total++;
-        diario[diaKey].cc.atendido++;
-        if (res.includes('Retido')) {
-            stats.cartao.retidoTotal++;
-            diario[diaKey].cc.retido++;
-            if (res.includes('Argumentação')) {
-                stats.cartao.retidoArg++;
-                diario[diaKey].cc.retidoArg++;
-            }
-            if (res.includes('Incentivo')) stats.cartao.retidoInc++; // Adicionado
-        } else if (res.includes('Cancelado')) {
-            stats.cartao.cancelado++;
-            diario[diaKey].cc.canc++;
-        }
-    } 
-    else if (tipo === 'Conta Digital') {
-        stats.conta.total++;
-        diario[diaKey].cd.atendido++;
-        if (res.includes('Retido')) {
-            stats.conta.retido++;
-            diario[diaKey].cd.retido++;
-        } else if (res.includes('Cancelado')) {
-            stats.conta.cancelado++;
-            diario[diaKey].cd.canc++;
-        }
-    }
-    // --- CORREÇÃO AQUI: TROCA DE PONTOS ---
-    else if (tipo === 'Troca de Pontos') {
-        if (res.includes('Cashback')) stats.pontos.cashback++;
-        if (res.includes('Milhas')) stats.pontos.milhas++;
-    }
-    // --- CORREÇÃO AQUI: MASSIFICADOS ---
-    else if (tipo === 'Massificado') {
-       const nomeM = sub || 'Outros';
-       if (!stats.massificado[nomeM]) stats.massificado[nomeM] = { arg:0, troca:0, canc:0 };
-       if (res.includes('Argumentação')) stats.massificado[nomeM].arg++;
-       else if (res.includes('Troca')) stats.massificado[nomeM].troca++;
-       else if (res.includes('Cancelado')) stats.massificado[nomeM].canc++;
+  const ranking = [];
+  const calcPct = (num, den) => (den && den > 0) ? (num / den) * 100 : 0;
+
+  listaMembros.forEach(membro => {
+    // Usa os dados já filtrados por período
+    const dadosDoMembro = dadosFiltrados.filter(row => row[1] === membro.email);
+    
+    if (dadosDoMembro.length > 0) {
+      const stats = processarEstatisticas(dadosDoMembro);
+      const comissao = calcularComissoes(stats);
+      const pctRetCC = calcPct(stats.cartao.retidoTotal, stats.cartao.retidoTotal + stats.cartao.cancelado);
+      const pctRetCD = calcPct(stats.conta.retido, stats.conta.retido + stats.conta.cancelado);
+
+      ranking.push({ 
+        email: membro.email, // Adicionado para destacar o usuário logado
+        nome: membro.nome, 
+        pctRetCC: pctRetCC, 
+        pctRetCD: pctRetCD, 
+        comissaoTotal: comissao.total 
+      });
     }
   });
 
-  return { geral: stats, diario: diario, equipe: listaMembros };
+  ranking.sort((a, b) => b.comissaoTotal - a.comissaoTotal);
+
+  return ranking;
 }
 // --- 5. EXPORTAÇÃO DE RELATÓRIO (CSV) ---
 function gerarRelatorioCSV(inicio, fim, tipoRelatorio) {

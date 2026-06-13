@@ -10,13 +10,77 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     
     <style>
-      :root { --primary-color: #004aad; --secondary-color: #34495e; --accent-color: #3498db; }
-      body { background-color: #f8f9fa; font-family: 'Segoe UI', system-ui, sans-serif; }
+      :root {
+        --primary-color: #004aad;
+        --secondary-color: #34495e;
+        --accent-color: #3498db;
+        --bg-color: #f8f9fa;
+        --text-color: #212529;
+        --card-bg: white;
+        --sidebar-text: rgba(255,255,255,0.8);
+        --sidebar-text-active: white;
+        --sidebar-bg-start: var(--primary-color);
+        --sidebar-bg-end: #003380;
+      }
+
+      /* --- Tema Escuro --- */
+      body.theme-dark {
+        --primary-color: #4a90e2;
+        --secondary-color: #bdc3c7;
+        --accent-color: #50e3c2;
+        --bg-color: #2c3e50;
+        --text-color: #ecf0f1;
+        --card-bg: #34495e;
+        --sidebar-text: rgba(236, 240, 241, 0.7);
+        --sidebar-text-active: #ecf0f1;
+        --sidebar-bg-start: #2c3e50;
+        --sidebar-bg-end: #233140;
+      }
+      body.theme-dark .card-kpi, body.theme-dark .modal-content { background-color: var(--card-bg); color: var(--text-color); }
+      body.theme-dark .table { color: var(--text-color); --bs-table-striped-bg: rgba(0,0,0,0.15); --bs-table-hover-bg: rgba(0,0,0,0.25); }
+      body.theme-dark .text-secondary { color: #bdc3c7 !important; }
+      body.theme-dark .text-muted { color: #95a5a6 !important; }
+      body.theme-dark .text-dark { color: #ecf0f1 !important; }
+      body.theme-dark .modal-header, body.theme-dark .card-header { border-bottom: 1px solid #4b5f71; }
+      body.theme-dark .form-control, body.theme-dark .form-select { background-color: #2c3e50; color: white; border-color: #566573; }
+      body.theme-dark .form-control:focus, body.theme-dark .form-select:focus { background-color: #2c3e50; color: white; border-color: var(--primary-color); box-shadow: 0 0 0 0.25rem rgba(var(--primary-color), 0.25); }
+      body.theme-dark .btn-close-white { filter: invert(0); }
+      body.theme-dark .dropdown-menu { background-color: #34495e; }
+      body.theme-dark .dropdown-item { color: #ecf0f1; }
+      body.theme-dark .dropdown-item:hover { background-color: #4a5a6a; }
+
+      /* --- Tema Rosa --- */
+      body.theme-rosa {
+        --primary-color: #e75480;
+        --secondary-color: #6a5acd;
+        --accent-color: #f9addb;
+        --bg-color: #fff0f5;
+        --sidebar-bg-start: #e75480;
+        --sidebar-bg-end: #c7436e;
+      }
+
+      /* --- Tema Brasil --- */
+      body.theme-brasil {
+        --primary-color: #009c3b; /* Verde */
+        --accent-color: #ffdf00; /* Amarelo */
+        --sidebar-bg-start: #009c3b;
+        --sidebar-bg-end: #008232;
+      }
+      body.theme-brasil .sidebar .nav-link:hover, body.theme-brasil .sidebar .nav-link.active { background: rgba(255, 223, 0, 0.3); } /* Amarelo no hover */
+      body.theme-brasil .border-primary, body.theme-brasil .text-primary, body.theme-brasil .bg-primary { border-color: var(--primary-color) !important; color: var(--primary-color) !important; background-color: var(--primary-color) !important; }
+      body.theme-brasil .btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); color: white; }
+      body.theme-brasil .btn-primary:hover { background-color: #006426; border-color: #006426; }
+      body.theme-brasil .btn-outline-primary { color: var(--primary-color); border-color: var(--primary-color); }
+      body.theme-brasil .btn-outline-primary:hover { color: white; background-color: var(--primary-color); }
+      body.theme-brasil .modal-header.bg-primary { background-color: var(--primary-color) !important; }
+
+      /* --- Estilos Base com Variáveis --- */
+      body { background-color: var(--bg-color); color: var(--text-color); font-family: 'Segoe UI', system-ui, sans-serif; }
       
       /* Sidebar */
       .sidebar { 
         height: 100vh; 
-        background: linear-gradient(180deg, var(--primary-color) 0%, #003380 100%); 
+        background: linear-gradient(180deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%); 
         color: white; 
         position: fixed; 
         width: 250px; 
@@ -26,15 +90,15 @@
       }
       .sidebar h3 { text-align: center; font-weight: 300; letter-spacing: 1px; }
       .sidebar .nav-link { 
-        color: rgba(255,255,255,0.8); 
+        color: var(--sidebar-text); 
         margin: 5px 15px; 
         border-radius: 8px; 
         transition: all 0.3s; 
         cursor: pointer; 
       }
       .sidebar .nav-link:hover, .sidebar .nav-link.active { 
-        background: rgba(255,255,255,0.2); 
-        color: white; 
+        background: rgba(255,255,255,0.15); 
+        color: var(--sidebar-text-active); 
         transform: translateX(5px); 
       }
       .sidebar .nav-link i { margin-right: 10px; width: 20px; text-align: center; }
@@ -44,7 +108,7 @@
       
       /* Cards & KPIs */
       .card-kpi { border: none; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: transform 0.2s; background: white; }
-      .card-kpi:hover { transform: translateY(-3px); }
+      .card-kpi:hover { transform: translateY(-3px); box-shadow: 0 6px 12px rgba(0,0,0,0.08); }
       
       .hidden { display: none !important; }
       
@@ -86,6 +150,7 @@
         <a class="nav-link hidden" onclick="showTab('tab1')"><i class="bi bi-speedometer2"></i> Status (Meus Resultados)</a>
         <a class="nav-link hidden" onclick="showTab('tab2')"><i class="bi bi-pencil-square"></i> Registrar Retenção</a>
         <a class="nav-link hidden" onclick="showTab('tab3')"><i class="bi bi-graph-up-arrow"></i> Gestão Equipe</a>
+        <a class="nav-link hidden" onclick="showTab('tab5')"><i class="bi bi-trophy-fill"></i> Ranking da Equipe</a>
         <a class="nav-link hidden" onclick="showTab('tab4')"><i class="bi bi-gear-fill"></i> Administração</a>
       </nav>
     </div>
@@ -93,12 +158,26 @@
 
     <div class="main-content">
       
-      <div id="tab1" class="tab-section hidden fade-in">
+      <div id="tab1" class="tab-section hidden">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h3 class="text-secondary mb-0"><i class="bi bi-person-badge"></i> Meus Resultados</h3>
-            <button class="btn btn-sm btn-outline-primary" onclick="toggleRelatorio('Pessoal')">
-                <i class="bi bi-download"></i> Baixar Meu Histórico
-            </button>
+            <h3 class="mb-0" style="color: var(--secondary-color);"><i class="bi bi-person-badge"></i> Meus Resultados</h3>
+            
+            <div class="d-flex align-items-center">
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle me-2" type="button" id="themeDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Trocar Tema">
+                        <i class="bi bi-palette-fill"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="themeDropdown">
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setTheme('default')">Padrão</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setTheme('dark')">Escuro</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setTheme('rosa')">Rosa</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="event.preventDefault(); setTheme('brasil')">Brasil</a></li>
+                    </ul>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" onclick="toggleRelatorio('Pessoal')">
+                    <i class="bi bi-download"></i> Baixar Meu Histórico
+                </button>
+            </div>
         </div>
         
         <div class="row mb-4">
@@ -286,6 +365,10 @@
                       <option value="Massificado">Massificado</option>
                   </select>
                 </div>
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Data do Atendimento</label>
+                    <input type="date" id="inputData" class="form-control">
+                </div>
                 <div class="mb-3 hidden" id="divMassificado">
                   <label class="form-label fw-bold">Produto:</label>
                     <select class="form-select" name="subProduto">
@@ -301,6 +384,10 @@
                 <div class="mb-4">
                   <label class="form-label fw-bold">Resultado</label>
                   <select class="form-select" id="inputResult"></select>
+                </div>
+                <div class="mb-4">
+                    <label for="inputObservacao" class="form-label fw-bold">Observação (Opcional)</label>
+                    <textarea class="form-control" id="inputObservacao" rows="2" placeholder="Ex: Cliente reclamou da anuidade, oferecido isenção por 6 meses."></textarea>
                 </div>
                 <div class="d-grid gap-2">
                   <button type="submit" class="btn btn-primary btn-lg" id="btnSalvar">Salvar Registro</button>
@@ -323,7 +410,7 @@
       </div>
 
       <div id="tab3" class="tab-section hidden">
-        <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-4">
               <h3><i class="bi bi-graph-up-arrow"></i> Gestão da Equipe</h3>
               <div>
                 <button class="btn btn-sm btn-outline-success me-2" onclick="toggleRelatorio('Equipe')"><i class="bi bi-file-earmark-spreadsheet"></i> Relatório Equipe</button>
@@ -402,6 +489,48 @@
         </div>
       </div>
 
+      <div id="tab5" class="tab-section hidden">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+              <h3 class="mb-0"><i class="bi bi-trophy-fill"></i> Ranking de Performance da Equipe</h3>
+              
+              <div id="ranking-period-filter" class="btn-group btn-group-sm" role="group">
+                  <input type="radio" class="btn-check" name="rankingPeriod" id="rankingTotal" autocomplete="off" value="total" checked>
+                  <label class="btn btn-outline-primary" for="rankingTotal">Desde o Início</label>
+
+                  <input type="radio" class="btn-check" name="rankingPeriod" id="rankingMensal" autocomplete="off" value="mensal">
+                  <label class="btn btn-outline-primary" for="rankingMensal">Este Mês</label>
+
+                  <input type="radio" class="btn-check" name="rankingPeriod" id="rankingSemanal" autocomplete="off" value="semanal">
+                  <label class="btn btn-outline-primary" for="rankingSemanal">Últimos 7 Dias</label>
+              </div>
+          </div>
+
+          <div class="card card-kpi">
+              <div class="card-body p-0">
+                  <div class="table-responsive">
+                      <table class="table table-striped table-hover mb-0">
+                          <thead class="table-light">
+                              <tr>
+                                  <th class="text-center" style="width: 5%;">#</th>
+                                  <th>Atendente</th>
+                                  <th class="text-center">Retenção CC %</th>
+                                  <th class="text-center">Retenção CD %</th>
+                                  <th class="text-center">Comissão Estimada</th>
+                              </tr>
+                          </thead>
+                          <tbody id="tbodyRanking">
+                              <tr>
+                                  <td colspan="5" class="text-center p-4">
+                                      <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Carregando...</span></div>
+                                  </td>
+                              </tr>
+                          </tbody>
+                      </table>
+                  </div>
+              </div>
+          </div>
+      </div>
+
       <div id="tab4" class="tab-section hidden">
           <div class="row">
               <div class="col-md-6">
@@ -472,6 +601,7 @@
         </div>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
     <script>
@@ -484,6 +614,21 @@
     let currentRelType = '';
     let currentUser = null; 
 
+    Chart.register(ChartDataLabels); // Registra o plugin de labels
+
+    // --- LÓGICA DE TEMAS ---
+    function setTheme(themeName) {
+        // Remove todas as classes de tema possíveis antes de adicionar a nova
+        document.body.classList.remove('theme-dark', 'theme-rosa', 'theme-brasil');
+        
+        if (themeName !== 'default') {
+            document.body.classList.add('theme-' + themeName);
+        }
+        // Salva a preferência do usuário no armazenamento local
+        localStorage.setItem('retencao_theme', themeName);
+    }
+
+
     // Helper matemático para porcentagem segura
     const calcPct = (num, den) => (den && den > 0) ? (num / den) * 100 : 0;
 
@@ -491,6 +636,13 @@
         modalRel = new bootstrap.Modal(document.getElementById('modalRelatorio'));
         
         // MELHORIA: CACHE DE SESSÃO
+        const savedTheme = localStorage.getItem('retencao_theme');
+        if (savedTheme) {
+            setTheme(savedTheme);
+        } else {
+            setTheme('default'); // Garante que um estado padrão seja definido
+        }
+
         const cachedUser = sessionStorage.getItem('retencao_userInfo');
         
         if (cachedUser) {
@@ -504,6 +656,14 @@
                 .withFailureHandler(err => document.getElementById('userInfo').innerText = "Erro: " + err)
                 .getUserInfo();
         }
+
+        // Adiciona o listener para o filtro de período do ranking
+        document.querySelectorAll('input[name="rankingPeriod"]').forEach(radio => {
+            radio.addEventListener('change', loadRankingData);
+        });
+
+        document.getElementById('inputData').valueAsDate = new Date();
+        });
 
         toggleForm(); 
 
@@ -549,6 +709,7 @@
             startTab = 'tab3'; 
         } else if (user.cargo === 'Supervisor') {
             document.querySelector('.nav-link[onclick*="tab3"]').classList.remove('hidden'); 
+            document.querySelector('.nav-link[onclick*="tab5"]').classList.remove('hidden');
             document.querySelector('.nav-link[onclick*="tab4"]').classList.remove('hidden'); 
             startTab = 'tab3';
         } else {
@@ -571,6 +732,9 @@
         // Se abriu a aba 2, carrega a lixeira
         if(id === 'tab2') {
             carregarUltimosRegistros();
+        }
+        if(id === 'tab5') {
+            loadRankingData();
         }
     }
 
@@ -746,7 +910,7 @@ function renderTeamCharts(equipeStats) {
         maintainAspectRatio: false,
         plugins: {
             legend: { display: false }, 
-            tooltip: {
+            tooltip: { // Tooltip continua mostrando valor e porcentagem
                 callbacks: {
                     label: function(context) {
                         let value = context.raw || 0;
@@ -754,6 +918,22 @@ function renderTeamCharts(equipeStats) {
                         let percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
                         return `${context.label}: ${value} (${percentage})`;
                     }
+                }
+            },
+            datalabels: { // Configuração para exibir os labels no gráfico
+                formatter: (value, context) => {
+                    if (value <= 0) return null; // Não exibe label para valores 0
+                    const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '';
+                    return percentage;
+                },
+                color: '#fff',
+                font: {
+                    weight: 'bold',
+                    size: 12,
+                },
+                textShadowBlur: 2,
+                textShadowColor: 'rgba(0, 0, 0, 0.5)'
                 }
             }
         }
@@ -768,7 +948,7 @@ function renderTeamCharts(equipeStats) {
     if (ctxCC) {
         if (chartTeamCC) chartTeamCC.destroy(); 
         chartTeamCC = new Chart(ctxCC, {
-            type: 'doughnut',
+            type: 'pie',
             data: {
                 labels: ['Retidos', 'Argumentados', 'Cancelados'],
                 datasets: [{
@@ -785,7 +965,7 @@ function renderTeamCharts(equipeStats) {
     if (ctxCD) {
         if (chartTeamCD) chartTeamCD.destroy();
         chartTeamCD = new Chart(ctxCD, {
-            type: 'doughnut',
+            type: 'pie',
             data: {
                 labels: ['Retidos', 'Cancelados'],
                 datasets: [{
@@ -841,17 +1021,32 @@ function renderTeamCharts(equipeStats) {
 
         const commonOpt = {
             responsive:true, maintainAspectRatio:false,
-            plugins: { legend: {position:'bottom'}, tooltip: {callbacks:{label: c=>c.label+': '+c.raw+'%'}} }
+            plugins: { 
+                legend: {position:'bottom'}, 
+                tooltip: {callbacks:{label: c=>c.label+': '+c.raw+'%'}},
+                datalabels: {
+                    formatter: (value, context) => {
+                        if (value <= 0) return null;
+                        return value.toFixed(1) + '%';
+                    },
+                    color: '#fff',
+                    font: {
+                        weight: 'bold'
+                    },
+                    textShadowBlur: 2,
+                    textShadowColor: 'rgba(0, 0, 0, 0.5)'
+                }
+            }
         };
 
         const totalCC = stats.cartao.retidoTotal + stats.cartao.cancelado; 
-        const pCCRet = calcPct(stats.cartao.retidoTotal, totalCC).toFixed(1);
-        const pCCArg = calcPct(stats.cartao.retidoArg, stats.cartao.retidoTotal).toFixed(1); 
-        const pCCCanc = calcPct(stats.cartao.cancelado, totalCC).toFixed(1);
+        const pCCRet = parseFloat(calcPct(stats.cartao.retidoTotal, totalCC).toFixed(1));
+        const pCCArg = parseFloat(calcPct(stats.cartao.retidoArg, stats.cartao.retidoTotal).toFixed(1)); 
+        const pCCCanc = parseFloat(calcPct(stats.cartao.cancelado, totalCC).toFixed(1));
 
         if(chartSupCC) chartSupCC.destroy();
         chartSupCC = new Chart(document.getElementById('chartSupCC'), {
-            type: 'doughnut',
+            type: 'pie',
             data: { 
                 labels: ['Retenção', 'Ret. Argumentação', 'Cancelado'],
                 datasets: [{ data: [pCCRet, pCCArg, pCCCanc], backgroundColor: ['#0d6efd','#198754','#dc3545'] }]
@@ -860,12 +1055,12 @@ function renderTeamCharts(equipeStats) {
         });
 
         const totalCD = stats.conta.retido + stats.conta.cancelado;
-        const pCDRet = calcPct(stats.conta.retido, totalCD).toFixed(1);
-        const pCDCanc = calcPct(stats.conta.cancelado, totalCD).toFixed(1);
+        const pCDRet = parseFloat(calcPct(stats.conta.retido, totalCD).toFixed(1));
+        const pCDCanc = parseFloat(calcPct(stats.conta.cancelado, totalCD).toFixed(1));
 
         if(chartSupCD) chartSupCD.destroy();
         chartSupCD = new Chart(document.getElementById('chartSupCD'), {
-            type: 'doughnut',
+            type: 'pie',
             data: { 
                 labels: ['Retidos', 'Cancelados'],
                 datasets: [{ data: [pCDRet, pCDCanc], backgroundColor: ['#198754','#dc3545'] }]
@@ -874,12 +1069,12 @@ function renderTeamCharts(equipeStats) {
         });
 
         const ptsTotal = (stats.pontos.cashback + stats.pontos.milhas) || 0;
-        const pCash = calcPct(stats.pontos.cashback, ptsTotal).toFixed(1);
-        const pMilha = calcPct(stats.pontos.milhas, ptsTotal).toFixed(1);
+        const pCash = parseFloat(calcPct(stats.pontos.cashback, ptsTotal).toFixed(1));
+        const pMilha = parseFloat(calcPct(stats.pontos.milhas, ptsTotal).toFixed(1));
 
         if(chartSupPts) chartSupPts.destroy();
         chartSupPts = new Chart(document.getElementById('chartSupPts'), {
-            type: 'doughnut',
+            type: 'pie',
             data: { 
                 labels: ['Cashback', 'Milhas'],
                 datasets: [{ data: [pCash, pMilha], backgroundColor: ['#0dcaf0','#ffc107'] }]
@@ -893,16 +1088,20 @@ function renderTeamCharts(equipeStats) {
         const tbCD = document.getElementById('tbodyDiaConta');
         tbCC.innerHTML=''; tbCD.innerHTML='';
 
+        // Otimização: Processa a lista de registros para agrupar por dia
+        const dadosDiarios = processarDiarioAgente(data.geral.lista);
+
         const hoje = new Date();
         const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
 
         for (let i = 1; i <= ultimoDia; i++) {
             const dataChave = `${String(i).padStart(2,'0')}/${String(hoje.getMonth()+1).padStart(2,'0')}/${hoje.getFullYear()}`;
-            const dia = (data.diario && data.diario[dataChave]) ? data.diario[dataChave] : { cc: { atendido:0, retido:0, retidoArg:0, canc:0 }, cd: { atendido:0, retido:0, canc:0 } };
+            // REATORAÇÃO: Usa os dados processados localmente, que seguem o mesmo padrão do dashboard do agente
+            const dia = dadosDiarios[dataChave] || { cc: { total:0, ret:0, arg:0, canc:0 }, cd: { total:0, ret:0, canc:0 } };
 
-            const diaTotalCC = dia.cc.retido + dia.cc.canc;
-            const pdRet = calcPct(dia.cc.retido, diaTotalCC).toFixed(2);
-            const pdArg = calcPct(dia.cc.retidoArg, dia.cc.retido).toFixed(2); 
+            const diaTotalCC = dia.cc.ret + dia.cc.canc;
+            const pdRet = calcPct(dia.cc.ret, diaTotalCC).toFixed(2);
+            const pdArg = calcPct(dia.cc.arg, dia.cc.ret).toFixed(2); 
             
             const colorRetCC = pdRet > 73 ? 'text-success' : 'text-danger';
             const colorArgCC = pdArg > 35 ? 'text-success' : 'text-danger';
@@ -910,14 +1109,14 @@ function renderTeamCharts(equipeStats) {
             tbCC.innerHTML += `<tr>
                 <td>${dataChave}</td>
                 <td>${diaTotalCC}</td>
-                <td class="text-sucess fw-bold">${dia.cc.retido}</td>
+                <td class="text-sucess fw-bold">${dia.cc.ret}</td>
                 <td class="${colorRetCC}">${pdRet}%</td>
                 <td class="${colorArgCC} fw-bold">${pdArg}%</td>
                 <td class="text-danger">${dia.cc.canc}</td>
             </tr>`;
             
-            const diaTotalCD = dia.cd.retido + dia.cd.canc;
-            const pcdRet = calcPct(dia.cd.retido, diaTotalCD).toFixed(2);
+            const diaTotalCD = dia.cd.ret + dia.cd.canc;
+            const pcdRet = calcPct(dia.cd.ret, diaTotalCD).toFixed(2);
             
             let colorRetCD = 'text-danger';
             if (pcdRet > 75) colorRetCD = 'text-success';
@@ -926,7 +1125,7 @@ function renderTeamCharts(equipeStats) {
             tbCD.innerHTML += `<tr>
                 <td>${dataChave}</td>
                 <td>${diaTotalCD}</td>
-                <td class="${colorRetCD} fw-bold">${dia.cd.retido}</td>
+                <td class="${colorRetCD} fw-bold">${dia.cd.ret}</td>
                 <td class="${colorRetCD}">${pcdRet}%</td>
                 <td class="text-danger">${dia.cd.canc}</td>
             </tr>`;
@@ -968,7 +1167,9 @@ function renderTeamCharts(equipeStats) {
     const data = {
         tipo: t,
         subProduto: (t === 'Massificado' && sub) ? sub.value : '-',
-        resultado: document.getElementById('inputResult').value
+        resultado: document.getElementById('inputResult').value,
+        dataAtendimento: document.getElementById('inputData').value,
+        observacao: document.getElementById('inputObservacao').value
     };
     
     const btn = document.getElementById('btnSalvar');
@@ -1060,106 +1261,62 @@ function renderTeamCharts(equipeStats) {
     
     function voltarParaDashboard() { showTab('tab1'); }
 
-    // --- MELHORIA: COMISSÃO DO CHAT ---
+    function loadRankingData() {
+        // Pega o período selecionado no filtro
+        const periodo = document.querySelector('input[name="rankingPeriod"]:checked').value;
 
-    function calcularComissoes(stats) {
-    // Inicializamos o objeto de resposta
-    let comissao = { cc: 0, cd: 0, cashback: 0, massificado: 0, total: 0 };
+        const tbody = document.getElementById('tbodyRanking');
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center p-4"><div class="spinner-border text-primary"></div></td></tr>`;
 
-    // --- 1. CARTÃO DE CRÉDITO (MANTIDO CONFORME SUA REGRA) ---
-    const totalCC = stats.cartao.total; 
-    const retidoCC = stats.cartao.retidoTotal;
-    const argCC = stats.cartao.retidoArg;
-
-    const pctCC = (totalCC > 0) ? (retidoCC / totalCC) * 100 : 0;
-    const pctArg = (retidoCC > 0) ? (argCC / retidoCC) * 100 : 0;
-
-    let comissaoCC = 0, comissaoArg = 0, bonusCC = 0;
-
-    if (pctCC >= 75) comissaoCC = 200; 
-    else if (pctCC >= 74) comissaoCC = 180; 
-    else if (pctCC >= 73) comissaoCC = 150;
-    
-    if (pctCC >= 73) {
-        if (pctArg >= 40) comissaoArg = 200; 
-        else if (pctArg >= 38) comissaoArg = 150; 
-        else if (pctArg >= 35) comissaoArg = 100;
+        google.script.run
+            .withSuccessHandler(renderRankingTable)
+            .withFailureHandler(err => {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger p-4">Erro ao carregar o ranking: ${err.message}</td></tr>`;
+            })
+            .getRankingData(periodo); // Passa o período para a função do backend
     }
-    
-    if (pctCC >= 78 && pctArg >= 44) bonusCC = 200; 
-    else if (pctCC >= 75 && pctArg >= 42) bonusCC = 100; 
 
-    comissao.cc = comissaoCC + comissaoArg + bonusCC;
+    function renderRankingTable(rankingData) {
+        const tbody = document.getElementById('tbodyRanking');
+        tbody.innerHTML = '';
 
-    // --- 2. CONTA DIGITAL (MANTIDO CONFORME SUA REGRA) ---
-    const totalCD = stats.conta.total; 
-    const pctConta = (totalCD > 0) ? (stats.conta.retido / totalCD) * 100 : 0; 
-    
-    let comissaoConta = 0, bonusConta = 0; 
-    if (pctConta >= 75) comissaoConta = 200; 
-    else if (pctConta >= 50) comissaoConta = 150; 
-    else if (pctConta >= 30) comissaoConta = 100; 
-    
-    if (pctConta >= 78) bonusConta = 150; 
-    else if (pctConta >= 76) bonusConta = 100;
+        if (!rankingData || rankingData.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted p-4">Nenhum dado de ranking para exibir.</td></tr>`;
+            return;
+        }
 
-    comissao.cd = comissaoConta + bonusConta;
+        const formatarMoeda = (valor) => (valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-    // --- 3. CASHBACK ---
-    const qtdCashback = stats.pontos.cashback || 0;
-    const qtdMilhas = stats.pontos.milhas || 0
-    const totalTrocas = qtdCashback + qtdMilhas; // O cálculo é sobre o total de atendimentos de pontos
-    
-    const pctCashback = (totalTrocas > 0) ? (qtdCashback / totalTrocas) * 100 : 0;
+        rankingData.forEach((item, index) => {
+            const rank = index + 1;
+            let rankClass = '';
+            if (rank === 1) rankClass = 'bg-warning text-dark fw-bold';
+            if (rank === 2) rankClass = 'bg-secondary bg-opacity-25';
+            if (rank === 3) rankClass = 'bg-warning bg-opacity-25';
 
-    if (pctCashback >= 45) valorCashback = 130;
-    else if (pctCashback >= 42) valorCashback = 100;
-    else if (pctCashback >= 39) valorCashback = 70;
-    else if (pctCashback >= 36) valorCashback = 50;
-    
-    comissao.cashback = valorCashback;
+            // Destaque para o usuário logado
+            let rowClass = '';
+            if (currentUser && item.email === currentUser.email) {
+                rowClass = 'table-info';
+            }
 
-    // --- 4. MASSIFICADOS (NOVO - BASEADO NAS TABELAS DAS IMAGENS 2 E 3) ---
-    const listaPadrao = ["SPPR / Bolsa Protegida", "Adicional", "Acidentes Pessoais", "Identidade protegida", "Seguro RE", "Martelinho de Ouro", "Quitação fatura"];
-    let totalMass = 0;
+            tbody.innerHTML += `
+                <tr class="${rowClass}">
+                    <td class="text-center align-middle ${rankClass}">${rank}</td>
+                    <td class="fw-bold align-middle">${item.nome}</td>
+                    <td class="text-center align-middle">${(item.pctRetCC || 0).toFixed(2)}%</td>
+                    <td class="text-center align-middle">${(item.pctRetCD || 0).toFixed(2)}%</td>
+                    <td class="text-center align-middle fw-bold">${formatarMoeda(item.comissaoTotal)}</td>
+                </tr>
+            `;
+        });
+    }
 
-    listaPadrao.forEach(nome => {
-        const p = stats.massificado[nome] || { arg: 0, troca: 0, canc: 0 };
-        const pTotal = p.arg + p.troca + p.canc;
-        const pPctArg = pTotal > 0 ? (p.arg / pTotal) * 100 : 0;
-        const pPctInc = pTotal > 0 ? (p.troca / pTotal) * 100 : 0;
+    function renderDashboard(pessoal, equipe) {
+    if(!pessoal || !pessoal.stats) return;
 
-        // Regra de Argumentação do Massificado
-        let vArg = 0;
-        if (pPctArg >= 60) vArg = 3.00;
-        else if (pPctArg >= 50) vArg = 2.50;
-        else if (pPctArg >= 30) vArg = 2.00;
-        else if (pPctArg >= 15) vArg = 1.50;
-        totalMass += (p.arg * vArg);
-
-        // Regra de Incentivo (Troca) do Massificado
-        let vInc = 0;
-        if (pPctInc >= 75) vInc = 2.00;
-        else if (pPctInc >= 70) vInc = 1.50;
-        else if (pPctInc >= 65) vInc = 1.25;
-        else if (pPctInc >= 60) vInc = 1.00;
-        totalMass += (p.troca * vInc);
-    });
-    
-    comissao.massificado = totalMass;
-
-    // --- 5. SOMA FINAL ---
-    comissao.total = comissao.cc + comissao.cd + comissao.cashback + comissao.massificado;
-
-    return comissao;
-}
-
-// ============================================================================
-// 2. SUA FUNÇÃO RENDER DASHBOARD ATUALIZADA
-// ============================================================================
-function renderDashboard(stats, equipeStats) {
-    if(!stats) return;
-
+    const stats = pessoal.stats;
+    const comissoes = pessoal.comissao;
     // Variáveis base de Cartão e Conta
     const ccRet = stats.cartao.retidoTotal || 0;
     const ccArg = stats.cartao.retidoArg || 0;
@@ -1169,11 +1326,7 @@ function renderDashboard(stats, equipeStats) {
     const totalAtendidosCC = ccRet + ccCanc;
     const totalAtendidosCD = stats.conta.retido + stats.conta.cancelado;
 
-    // ------------------------------------------------------------------------
-    // MUDANÇA 1: Usar a nossa nova função de comissão e formatador de moeda
-    // ------------------------------------------------------------------------
-    const comissoes = calcularComissoes(stats);
-    const formatarMoeda = (valor) => valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    const formatarMoeda = (valor) => (valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
     // Preenchendo o Card 3 (Resumo de Comissões)
     document.getElementById('comissaoTotal').innerText = formatarMoeda(comissoes.total);
@@ -1181,7 +1334,6 @@ function renderDashboard(stats, equipeStats) {
     document.getElementById('comissaoCD').innerText = formatarMoeda(comissoes.cd);
     document.getElementById('comissaoCashback').innerText = formatarMoeda(comissoes.cashback);
     document.getElementById('comissaoMass').innerText = formatarMoeda(comissoes.massificado);
-    // ------------------------------------------------------------------------
 
     // Preenchendo o Card 1 (Cartão de Crédito)
     const pctGeralCC = calcPct(ccRet, totalAtendidosCC);
@@ -1195,17 +1347,14 @@ function renderDashboard(stats, equipeStats) {
     elArg.innerText = pctArgCC.toFixed(2) + '%';
     elArg.className = "fs-2 fw-bold " + getArgColorClass(pctArgCC);
     
-    // MUDANÇA 2: Adicionei o total de atendidos do CC que não tinha antes
     if(document.getElementById('qtdCCTotal')) document.getElementById('qtdCCTotal').innerText = totalAtendidosCC;
     document.getElementById('qtdCCRetGeral').innerText = ccRet;
     document.getElementById('qtdCCCanc').innerText = ccCanc;
     document.getElementById('qtdCCArg').innerText = ccArg;
-    // O html anterior não tinha id pra Inc, se você não for usar, não tem problema sobrar aqui
     if(document.getElementById('qtdCCInc')) document.getElementById('qtdCCInc').innerText = ccInc;
     
     // Preenchendo o Card 2 (Conta Digital)
     const pctGeralCD = calcPct(stats.conta.retido, totalAtendidosCD);
-    // MUDANÇA 3: Adicionado a % de cancelamento da CD para o card
     const pctCancCD = calcPct(stats.conta.cancelado, totalAtendidosCD); 
 
     const elCD = document.getElementById('cdPctGeral');
@@ -1293,9 +1442,9 @@ function renderDashboard(stats, equipeStats) {
     // Gráficos Equipe (mantido igual)
     const teamCard = document.getElementById('cardTeamCharts');
     if(teamCard) {
-        if(equipeStats) {
+        if(equipe && equipe.stats) {
              teamCard.classList.remove('hidden');
-             renderTeamCharts(equipeStats);
+             renderTeamCharts(equipe.stats);
         } else {
              teamCard.classList.add('hidden');
         }
