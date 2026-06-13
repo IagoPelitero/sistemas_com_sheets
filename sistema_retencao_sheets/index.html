@@ -663,7 +663,7 @@
         });
 
         document.getElementById('inputData').valueAsDate = new Date();
-        });
+        };
 
         toggleForm(); 
 
@@ -676,8 +676,7 @@
                     list.forEach(s => selSup.add(new Option(s, s)));
                 }
             }).getSupervisoresList();
-        }
-    };
+        };
 
     function setupUser(user) {
         if(!user || user.error) { 
@@ -994,7 +993,7 @@ function renderTeamCharts(equipeStats) {
             options: commonOptions 
         });
     }
-}
+
 
     // --- GESTÃO SUPERVISOR ---
     function updateSupervisorStats() {
