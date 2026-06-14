@@ -6,8 +6,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <style>
-    :root {
-      /* CORES PORTO */
+    :root, [data-theme="porto"] {
+      /* TEMA PORTO (PADRÃO) */
       --primary: #004691; 
       --secondary: #00a1e0; 
       --accent: #ffcc00; 
@@ -17,6 +17,63 @@
       --success: #27ae60;
       --danger: #e74c3c;
     }
+
+    [data-theme="dark"] {
+      --primary: #2c3e50; 
+      --secondary: #3498db; 
+      --accent: #f1c40f; 
+      --bg-light: #34495e;
+      --text: #ecf0f1;
+      --sidebar-width: 260px;
+      --success: #2ecc71;
+      --danger: #e74c3c;
+    }
+    [data-theme="dark"] .box,
+    [data-theme="dark"] .card,
+    [data-theme="dark"] .gauge-container,
+    [data-theme="dark"] .modal-content,
+    [data-theme="dark"] body { background: var(--bg-light); }
+    [data-theme="dark"] .box, [data-theme="dark"] .card, [data-theme="dark"] .gauge-container, [data-theme="dark"] .modal-content { background-color: #2c3e50; }
+    [data-theme="dark"] h1 { color: var(--secondary); }
+    [data-theme="dark"] td { color: #bdc3c7; border-color: #34495e; }
+    [data-theme="dark"] th { background: #34495e; color: var(--secondary); border-color: #2c3e50; }
+    [data-theme="dark"] .card.blue-card { background: #34495e; }
+    [data-theme="dark"] .user-profile { background: #233140; }
+    [data-theme="dark"] input, [data-theme="dark"] select { background: #34495e; color: white; border-color: #7f8c8d; }
+
+    [data-theme="brazil"] {
+      --primary: #009c3b; /* Verde */
+      --secondary: #ffdf00; /* Amarelo */
+      --accent: #002776; /* Azul */
+      --bg-light: #f1f8e9;
+      --text: #212121;
+      --sidebar-width: 260px;
+      --success: #009c3b;
+      --danger: #d32f2f;
+    }
+    [data-theme="brazil"] .sidebar { background: var(--primary); }
+    [data-theme="brazil"] .user-profile { background: #006426; }
+    [data-theme="brazil"] .nav-btn.active { color: var(--primary); border-left-color: var(--accent); }
+    [data-theme="brazil"] h1 { color: var(--primary); border-bottom-color: var(--secondary); }
+    [data-theme="brazil"] .card { border-top-color: var(--secondary); }
+    [data-theme="brazil"] .progress-fill { background: linear-gradient(90deg, var(--secondary), var(--accent)); }
+    [data-theme="brazil"] button.btn { background: var(--secondary); color: var(--primary); font-weight: bold; }
+    [data-theme="brazil"] button.btn:hover { background: var(--accent); color: white; }
+
+    [data-theme="pink"] {
+      --primary: #d81b60; 
+      --secondary: #f06292; 
+      --accent: #fce4ec; 
+      --bg-light: #fce4ec;
+      --text: #333;
+      --sidebar-width: 260px;
+      --success: #4caf50;
+      --danger: #f44336;
+    }
+    [data-theme="pink"] .nav-btn.active { color: var(--primary); border-left-color: var(--primary); }
+    [data-theme="pink"] .progress-fill { background: linear-gradient(90deg, var(--secondary), var(--primary)); }
+    [data-theme="pink"] .card.blue-card { background: var(--primary); }
+    [data-theme="pink"] .user-profile { background: #a01447; }
 
     body { margin: 0; font-family: 'Roboto', sans-serif; background: var(--bg-light); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
 
@@ -34,6 +91,17 @@
     /* CONTEÚDO */
     .main-content { flex: 1; padding: 30px; overflow-y: auto; }
     h1 { color: var(--primary); margin-top: 0; font-weight: 300; border-bottom: 2px solid var(--secondary); display: inline-block; padding-bottom: 5px; }
+    .header-container { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+    .header-container h1 { margin-bottom: 0; }
+
+    /* THEME SWITCHER */
+    .theme-switcher { display: flex; gap: 8px; padding: 5px; background: rgba(0,0,0,0.05); border-radius: 20px; }
+    .theme-btn { width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    .theme-btn[data-theme-id="porto"] { background-color: #004691; }
+    .theme-btn[data-theme-id="dark"] { background-color: #2c3e50; }
+    .theme-btn[data-theme-id="brazil"] { background-color: #009c3b; }
+    .theme-btn[data-theme-id="pink"] { background-color: #d81b60; }
+
     .tab-section { display: none; animation: fadeIn 0.4s ease; }
     .tab-section.active { display: block; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -75,29 +143,73 @@
     .spinner { border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
     @keyframes spin { 100% { transform: rotate(360deg); } }
 
+    /* NOTIFICAÇÃO */
+    #notification { position: fixed; top: 20px; right: 20px; padding: 15px 25px; border-radius: 6px; color: white; background: var(--success); box-shadow: 0 5px 15px rgba(0,0,0,0.2); z-index: 3000; transform: translateX(120%); transition: transform 0.4s ease-in-out; }
+    #notification.show { transform: translateX(0); }
+    #notification.error { background: var(--danger); }
+
+    /* MODAL */
+    .modal-container {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.6);
+      display: flex; justify-content: center; align-items: center;
+      z-index: 4000;
+      opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+    }
+    .modal-container:not(.hidden) {
+      opacity: 1; pointer-events: auto;
+    }
+    .modal-content {
+      background: white; border-radius: 8px;
+      width: 90%; max-width: 900px;
+      max-height: 80vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+      transform: scale(0.95); transition: transform 0.3s ease;
+    }
+    .modal-container:not(.hidden) .modal-content {
+      transform: scale(1);
+    }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 15px 25px; border-bottom: 1px solid #eee; }
+    .modal-header h2 { margin: 0; font-size: 1.2em; color: var(--primary); }
+    .modal-close { font-size: 2em; font-weight: bold; color: #aaa; cursor: pointer; transition: color 0.2s; }
+    .modal-close:hover { color: var(--danger); }
+    .modal-body { padding: 25px; overflow-y: auto; }
+    #logTable td:last-child { white-space: normal; }
+
+    .admin-header-actions { display: flex; align-items: center; gap: 20px; }
     .hidden { display: none !important; }
   </style>
 </head>
-<body>
-
+<body data-theme="porto">
+  
   <div id="loader"><div class="spinner"></div></div>
 
   <div class="sidebar">
     <div class="logo-area"><h2>Sistema de vendas</h2></div>
     
-    <button class="nav-btn hidden" id="btn-resumo" onclick="navTo('resumo')">Meu Resumo</button>
-    <button class="nav-btn hidden" id="btn-venda" onclick="navTo('venda')">Registrar Venda</button>
-    <button class="nav-btn hidden" id="btnEquipe" onclick="navTo('equipe')">Minha Equipe</button>
-    <button class="nav-btn hidden" id="btnAdmin" onclick="navTo('admin')">Admin</button>
+    <button class="nav-btn hidden" data-tab="resumo" onclick="navTo('resumo')">Meu Resumo</button>
+    <button class="nav-btn hidden" data-tab="venda" onclick="navTo('venda')">Registrar Venda</button>
+    <button class="nav-btn hidden" data-tab="equipe" onclick="navTo('equipe')">Minha Equipe</button>
+    <button class="nav-btn hidden" data-tab="admin" onclick="navTo('admin')">Admin</button>
 
     <div class="user-profile" id="userProfile">Carregando...</div>
   </div>
 
   <div class="main-content">
+
+    <div id="notification"></div>
     
     <div id="resumo" class="tab-section">
-      <h1>Painel de Resultados</h1>
-      
+      <div class="header-container">
+        <h1>Painel de Resultados</h1>
+        <div id="theme-switcher-resumo" class="theme-switcher hidden">
+          <button title="Tema Porto" class="theme-btn" data-theme-id="porto" onclick="changeTheme('porto')"></button>
+          <button title="Tema Escuro" class="theme-btn" data-theme-id="dark" onclick="changeTheme('dark')"></button>
+          <button title="Tema Brasil" class="theme-btn" data-theme-id="brazil" onclick="changeTheme('brazil')"></button>
+          <button title="Tema Rosa" class="theme-btn" data-theme-id="pink" onclick="changeTheme('pink')"></button>
+        </div>
+      </div>
       <div class="cards-wrapper">
         <div class="card">
           <h3>Minhas Vendas</h3>
@@ -139,6 +251,9 @@
       <div class="grid-row">
         <div class="box">
           <h3>Minhas Vendas por massificado</h3>
+          <div id="pieChartContainer" style="position: relative; height:250px; margin-bottom: 20px; display: none;">
+            <canvas id="mySalesPieChart"></canvas>
+          </div>
           <table>
             <thead><tr><th>Produto</th><th>Qtd</th></tr></thead>
             <tbody id="tblIndivBody"><tr><td colspan="2">Carregando...</td></tr></tbody>
@@ -180,8 +295,15 @@
     </div>
 
     <div id="equipe" class="tab-section">
-      <h1>Gestão da Equipe</h1>
-      
+      <div class="header-container">
+        <h1>Gestão da Equipe</h1>
+        <div id="theme-switcher-equipe" class="theme-switcher hidden">
+          <button title="Tema Porto" class="theme-btn" data-theme-id="porto" onclick="changeTheme('porto')"></button>
+          <button title="Tema Escuro" class="theme-btn" data-theme-id="dark" onclick="changeTheme('dark')"></button>
+          <button title="Tema Brasil" class="theme-btn" data-theme-id="brazil" onclick="changeTheme('brazil')"></button>
+          <button title="Tema Rosa" class="theme-btn" data-theme-id="pink" onclick="changeTheme('pink')"></button>
+        </div>
+      </div>
       <div class="cards-wrapper">
         <div class="card blue-card">
           <h3>Total Vendas (Filtrado)</h3>
@@ -242,8 +364,18 @@
     </div>
 
     <div id="admin" class="tab-section">
-      <h1>Administração</h1>
-      
+      <div class="header-container">
+        <h1>Administração</h1>
+        <div class="admin-header-actions">
+          <button id="btnViewLogs" class="btn hidden" style="width: auto; background: #7f8c8d;" onclick="openLogsModal()">Ver Logs de Auditoria</button>
+          <div id="theme-switcher-admin" class="theme-switcher hidden">
+            <button title="Tema Porto" class="theme-btn" data-theme-id="porto" onclick="changeTheme('porto')"></button>
+            <button title="Tema Escuro" class="theme-btn" data-theme-id="dark" onclick="changeTheme('dark')"></button>
+            <button title="Tema Brasil" class="theme-btn" data-theme-id="brazil" onclick="changeTheme('brazil')"></button>
+            <button title="Tema Rosa" class="theme-btn" data-theme-id="pink" onclick="changeTheme('pink')"></button>
+          </div>
+        </div>
+      </div>
       <div class="grid-row">
         <div class="box">
           <h3>Novo Usuário</h3>
@@ -294,14 +426,44 @@
 
   </div>
 
+  <!-- Log Modal -->
+  <div id="logModal" class="modal-container hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Logs de Auditoria</h2>
+        <span class="modal-close" onclick="closeLogsModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <table id="logTable">
+          <thead>
+            <tr><th>Data/Hora</th><th>Usuário</th><th>Ação</th><th>Detalhes</th></tr>
+          </thead>
+          <tbody id="logTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <script>
     let chartInstance = null;
+    let pieChartInstance = null;
 
     window.onload = function() {
+      const savedTheme = localStorage.getItem('selectedTheme') || 'porto';
+      changeTheme(savedTheme);
+
       document.getElementById('inputDate').valueAsDate = new Date();
       carregarProdutos();
       carregarDashboard();
+      document.getElementById('logModal').addEventListener('click', function(e) {
+        if (e.target === this) closeLogsModal();
+      });
     };
+
+    function changeTheme(themeName) {
+      document.body.dataset.theme = themeName;
+      localStorage.setItem('selectedTheme', themeName);
+    }
 
     function carregarProdutos() {
       google.script.run.withSuccessHandler(lista => {
@@ -315,59 +477,83 @@
 
     function carregarDashboard() {
       toggleLoader(true);
-      google.script.run.withSuccessHandler(data => {
-        toggleLoader(false);
-        if(data.error) return alert(data.error);
+      google.script.run.withSuccessHandler(handleDashboardData).getTab1Data();
+    }
 
-        // --- PERFIL E CONTROLE DE ACESSO ---
-        const u = data.user;
-        const cargo = u.cargo.toLowerCase();
-        let htmlUser = `<strong>${u.nome}</strong><span>${u.cargo}</span><span>${u.equipe}</span>`;
-        if(['atendente','operador'].includes(cargo) && u.supervisor) {
-          htmlUser += `<span style="margin-top:5px; border-top:1px solid rgba(255,255,255,0.2); padding-top:5px; font-size:0.9em;">Sup: ${u.supervisor}</span>`;
-        }
-        document.getElementById('userProfile').innerHTML = htmlUser;
+    function handleDashboardData(data) {
+      toggleLoader(false);
+      if(data.error) return showNotification(data.error, true);
 
-        if (cargo === 'adm') {
-          document.getElementById('btn-resumo').classList.remove('hidden');
-          document.getElementById('btn-venda').classList.remove('hidden');
-          document.getElementById('btnEquipe').classList.remove('hidden');
-          document.getElementById('btnAdmin').classList.remove('hidden');
-          google.script.run.withSuccessHandler(teams => {
-            const sel = document.getElementById('selEquipeAdmin');
-            sel.innerHTML = '<option value="">Selecione...</option>';
-            teams.forEach(t => sel.add(new Option(t, t)));
-          }).getUniqueTeams();
-          navTo('resumo');
-        } else if (cargo === 'supervisor') {
-          document.getElementById('btnEquipe').classList.remove('hidden');
-          navTo('equipe');
-        } else {
-          document.getElementById('btn-resumo').classList.remove('hidden');
-          document.getElementById('btn-venda').classList.remove('hidden');
-          navTo('resumo');
-        }
+      const initialTab = _setupNavigation(data.user);
+      _populateUserProfile(data.user);
+      _populateResumoData(data);
+      
+      navTo(initialTab);
+    }
 
-        // --- PREENCHIMENTO DE DADOS DO RESUMO ---
-        document.getElementById('dashTotal').textContent = data.totalVendas;
-        document.getElementById('dashTotalEquipe').textContent = data.totalVendasEquipe; 
-        document.getElementById('dashMeta').textContent = data.meta;
-        document.getElementById('valProjecao').textContent = data.projecao.mediaNecessaria;
-        document.getElementById('txtDiasRestantes').textContent = `Faltam ${data.projecao.diasRestantes} dias no mês`;
-        
-        const bar = document.getElementById('gaugeBar');
-        const pct = Math.min(data.percentual, 100).toFixed(0);
-        bar.style.width = pct + '%';
-        bar.textContent = data.percentual.toFixed(1) + '%';
-        document.getElementById('txtPorcentagem').textContent = data.percentual.toFixed(1) + '%';
-        
-        document.getElementById('valSemCPCP').textContent = formatMoney(data.comissaoSemCPCP);
-        document.getElementById('valCPCP').textContent = formatMoney(data.comissaoCPCP);
+    function _populateUserProfile(user) {
+      const cargo = user.cargo.toLowerCase();
+      let htmlUser = `<strong>${user.nome}</strong><span>${user.cargo}</span><span>${user.equipe}</span>`;
+      if(['atendente','operador'].includes(cargo) && user.supervisor) {
+        htmlUser += `<span style="margin-top:5px; border-top:1px solid rgba(255,255,255,0.2); padding-top:5px; font-size:0.9em;">Sup: ${user.supervisor}</span>`;
+      }
+      document.getElementById('userProfile').innerHTML = htmlUser;
+    }
 
-        renderTable('tblIndivBody', data.tabelaIndiv);
-        renderTable('tblEquipeBody', data.tabelaEquipe);
+    function _setupNavigation(user) {
+      const cargo = user.cargo.toLowerCase();
+      const permissions = {
+        adm: { tabs: ['resumo', 'venda', 'equipe', 'admin'], initial: 'resumo' },
+        supervisor: { tabs: ['equipe'], initial: 'equipe' },
+        atendente: { tabs: ['resumo', 'venda'], initial: 'resumo' },
+        operador: { tabs: ['resumo', 'venda'], initial: 'resumo' }
+      };
+      const userPermissions = permissions[cargo] || permissions.atendente;
 
-      }).getTab1Data();
+      document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
+        btn.classList.toggle('hidden', !userPermissions.tabs.includes(btn.dataset.tab));
+      });
+
+      if (cargo === 'adm') {
+        google.script.run.withSuccessHandler(teams => {
+          const sel = document.getElementById('selEquipeAdmin');
+          sel.innerHTML = '<option value="">Selecione...</option>';
+          teams.forEach(t => sel.add(new Option(t, t)));
+        }).getUniqueTeams();
+      }
+
+      document.getElementById('btnViewLogs').classList.toggle('hidden', cargo !== 'adm');
+
+      // Visibilidade do seletor de tema
+      document.querySelectorAll('.theme-switcher').forEach(sw => sw.classList.add('hidden'));
+      if (['atendente', 'operador'].includes(cargo)) {
+        document.getElementById('theme-switcher-resumo').classList.remove('hidden');
+      } else if (cargo === 'supervisor') {
+        document.getElementById('theme-switcher-equipe').classList.remove('hidden');
+      } else if (cargo === 'adm') {
+        document.getElementById('theme-switcher-admin').classList.remove('hidden');
+      }
+
+      return userPermissions.initial;
+    }
+
+    function _populateResumoData(data) {
+      document.getElementById('dashTotal').textContent = data.totalVendas;
+      document.getElementById('dashTotalEquipe').textContent = data.totalVendasEquipe; 
+      document.getElementById('dashMeta').textContent = data.meta;
+      document.getElementById('valProjecao').textContent = data.projecao.mediaNecessaria;
+      document.getElementById('txtDiasRestantes').textContent = `Faltam ${data.projecao.diasRestantes} dias no mês`;
+      
+      const pct = data.percentual.toFixed(1);
+      document.getElementById('gaugeBar').style.width = Math.min(data.percentual, 100) + '%';
+      document.getElementById('gaugeBar').textContent = pct + '%';
+      document.getElementById('txtPorcentagem').textContent = pct + '%';
+      
+      document.getElementById('valSemCPCP').textContent = formatMoney(data.comissaoSemCPCP);
+      document.getElementById('valCPCP').textContent = formatMoney(data.comissaoCPCP);
+      renderTable('tblIndivBody', data.tabelaIndiv);
+      renderTable('tblEquipeBody', data.tabelaEquipe);
+      renderPieChart(data.tabelaIndiv);
     }
 
     function navTo(id) {
@@ -375,8 +561,8 @@
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
       
       document.getElementById(id).classList.add('active');
-      const btnMap = {'resumo':0, 'venda':1, 'equipe':2, 'admin':3};
-      document.querySelectorAll('.nav-btn')[btnMap[id]].classList.add('active');
+      const activeButton = document.querySelector(`.nav-btn[data-tab='${id}']`);
+      if (activeButton) activeButton.classList.add('active');
       
       if(id === 'equipe') {
         carregarEquipe();
@@ -391,7 +577,7 @@
 
       google.script.run.withSuccessHandler(data => {
         toggleLoader(false);
-        if(data.error) return alert(data.error);
+        if(data.error) return showNotification(data.error, true);
 
         if(selFiltro && selFiltro.options.length === 1) { 
            data.membros.forEach(m => selFiltro.add(new Option(m.nome, m.email)));
@@ -405,14 +591,15 @@
 
         const tbody = document.getElementById('tblMembros');
         tbody.innerHTML = '';
+        const fragment = document.createDocumentFragment();
         data.membros.forEach(m => {
-          tbody.innerHTML += `
-            <tr>
-              <td>${m.nome}<br><small style="color:#888;">${m.email}</small></td>
-              <td>${m.cargo}</td>
-              <td><button class="btn btn-danger" onclick="excluirMembro('${m.email}')">Remover</button></td>
-            </tr>`;
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${m.nome}<br><small style="color:#888;">${m.email}</small></td>
+                        <td>${m.cargo}</td>
+                        <td><button class="btn btn-danger" onclick="excluirMembro('${m.email}')">Remover</button></td>`;
+          fragment.appendChild(tr);
         });
+        tbody.appendChild(fragment);
       }).getTeamData(emailFiltro);
     }
 
@@ -436,13 +623,50 @@
       });
     }
 
+    function renderPieChart(data) {
+      const container = document.getElementById('pieChartContainer');
+      const ctx = document.getElementById('mySalesPieChart').getContext('2d');
+      if(pieChartInstance) pieChartInstance.destroy();
+
+      const filteredData = data.filter(d => d.qtd > 0);
+
+      if (filteredData.length === 0) {
+        container.style.display = 'none';
+        return;
+      }
+      container.style.display = 'block';
+
+      pieChartInstance = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: filteredData.map(d => d.prod),
+          datasets: [{
+            data: filteredData.map(d => d.qtd),
+            backgroundColor: [
+              '#00a1e0', '#ffcc00', '#27ae60', '#e74c3c', '#8e44ad', '#f39c12',
+              '#34495e', '#16a085', '#c0392b', '#2980b9', '#d35400', '#7f8c8d'
+            ],
+            borderColor: 'var(--bg-light)',
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'right', labels: { color: 'var(--text)' } }
+          }
+        }
+      });
+    }
+
     // --- AÇÕES ---
     function submitMeta(e, isAdmin) {
       e.preventDefault(); toggleLoader(true);
       const form = e.target;
       const equipeAlvo = isAdmin ? form.equipe.value : null;
       google.script.run.withSuccessHandler(res => {
-         toggleLoader(false); alert(res.message || res.error);
+         toggleLoader(false); showNotification(res.message || res.error, !!res.error);
          carregarDashboard(); if(!isAdmin) carregarEquipe(); 
       }).updateMeta(equipeAlvo, form.valorMeta.value);
     }
@@ -451,8 +675,8 @@
       e.preventDefault(); toggleLoader(true); const f = document.getElementById('formVenda');
       google.script.run.withSuccessHandler(res => {
         toggleLoader(false);
-        if(res.success) { alert('Venda Salva!'); f.reset(); document.getElementById('inputDate').valueAsDate = new Date(); navTo('resumo'); carregarDashboard(); }
-        else alert(res.error);
+        if(res.success) { showNotification('Venda salva com sucesso!'); f.reset(); document.getElementById('inputDate').valueAsDate = new Date(); navTo('resumo'); carregarDashboard(); }
+        else showNotification(res.error, true);
       }).registerSale({ data: f.data.value, produto: f.produto.value, protocolo: f.protocolo.value, quantidade: f.quantidade.value });
     }
 
@@ -460,8 +684,8 @@
       e.preventDefault(); toggleLoader(true); const f = document.getElementById('formUser');
       google.script.run.withSuccessHandler(res => {
         toggleLoader(false);
-        if(res.success) { alert('Cadastrado!'); f.reset(); carregarDashboard(); }
-        else alert(res.error);
+        if(res.success) { showNotification('Usuário cadastrado!'); f.reset(); carregarDashboard(); }
+        else showNotification(res.error, true);
       }).addUser({ email: f.email.value, nome: f.nome.value, equipe: f.equipe.value, cargo: f.cargo.value });
     }
 
@@ -469,8 +693,8 @@
       e.preventDefault(); toggleLoader(true); const f = e.target;
       google.script.run.withSuccessHandler(res => {
         toggleLoader(false);
-        if(res.success) { alert("Atendente adicionado!"); f.reset(); carregarEquipe(); }
-        else alert(res.error);
+        if(res.success) { showNotification("Atendente adicionado!"); f.reset(); carregarEquipe(); }
+        else showNotification(res.error, true);
       }).addUser({ email: f.email.value, nome: f.nome.value, cargo: 'Atendente' });
     }
 
@@ -478,7 +702,7 @@
       e.preventDefault();
       if(!confirm("Gerar backup e limpar a base atual?")) return;
       toggleLoader(true);
-      google.script.run.withSuccessHandler(res => { toggleLoader(false); alert(res.message || res.error); carregarDashboard(); }).archiveData(e.target.url.value);
+      google.script.run.withSuccessHandler(res => { toggleLoader(false); showNotification(res.message || res.error, !!res.error); carregarDashboard(); }).archiveData(e.target.url.value);
     }
 
     function excluirMembro(email) {
@@ -495,19 +719,69 @@
           const a = document.createElement("a");
           a.href = res.url; a.download = "relatorio.csv";
           document.body.appendChild(a); a.click(); document.body.removeChild(a);
-          setTimeout(() => google.script.run.deletarArquivoTemp(res.id), 10000);
+          setTimeout(() => google.script.run.deletarArquivoTemp(res.id), 15000);
         } else alert("Erro: " + res.error);
       }).exportarRelatorioEquipe();
     }
 
     function renderTable(id, data) {
       const tb = document.getElementById(id);
-      tb.innerHTML = '';
-      if(!data || data.length === 0) tb.innerHTML = '<tr><td colspan="2">Nenhum dado</td></tr>';
-      else data.forEach(d => tb.innerHTML += `<tr><td>${d.prod}</td><td>${d.qtd}</td></tr>`);
+      tb.innerHTML = ''; // Limpa conteúdo existente
+      if (!data || data.length === 0) {
+        tb.innerHTML = '<tr><td colspan="2">Nenhum dado</td></tr>';
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      data.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${d.prod}</td><td>${d.qtd}</td>`;
+        fragment.appendChild(tr);
+      });
+      tb.appendChild(fragment);
     }
 
     function toggleLoader(s) { document.getElementById('loader').style.display = s ? 'flex' : 'none'; }
+
+    function showNotification(message, isError = false) {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.classList.toggle('error', isError);
+      notification.classList.add('show');
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 4000);
+    }
+
+    function openLogsModal() {
+      toggleLoader(true);
+      document.getElementById('logModal').classList.remove('hidden');
+      google.script.run.withSuccessHandler(logs => {
+        toggleLoader(false);
+        if (logs.error) {
+          showNotification(logs.error, true);
+          closeLogsModal();
+          return;
+        }
+        const tbody = document.getElementById('logTableBody');
+        tbody.innerHTML = '';
+        if (logs.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Nenhum log encontrado.</td></tr>';
+          return;
+        }
+        const fragment = document.createDocumentFragment();
+        logs.forEach(log => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${log.timestamp}</td><td>${log.user}</td><td>${log.action}</td><td>${log.details}</td>`;
+          fragment.appendChild(tr);
+        });
+        tbody.appendChild(fragment);
+      }).getAuditLogs();
+    }
+
+    function closeLogsModal() {
+      document.getElementById('logModal').classList.add('hidden');
+    }
   </script>
 </body>
 </html>
