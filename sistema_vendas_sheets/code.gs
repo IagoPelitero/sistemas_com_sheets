@@ -1,4 +1,8 @@
-jsconst SPREADSHEET_ID = 'id_sheets'; 
+/** SISTEMA DE VENDAS PORTO - VERSÃO FINAL COMPLETA
+ * Contém: LockService, Projeção de Meta, Auditoria, Comissões, Permissões e Relatórios
+ */
+
+jsconst SPREADSHEET_ID = 'id_sheets';
 
 const SHEETS = {
   VENDAS: "vendas_ativas",

@@ -18,29 +18,6 @@
       --danger: #e74c3c;
     }
 
-    [data-theme="dark"] {
-      --primary: #2c3e50; 
-      --secondary: #3498db; 
-      --accent: #f1c40f; 
-      --bg-light: #34495e;
-      --text: #ecf0f1;
-      --sidebar-width: 260px;
-      --success: #2ecc71;
-      --danger: #e74c3c;
-    }
-    [data-theme="dark"] .box,
-    [data-theme="dark"] .card,
-    [data-theme="dark"] .gauge-container,
-    [data-theme="dark"] .modal-content,
-    [data-theme="dark"] body { background: var(--bg-light); }
-    [data-theme="dark"] .box, [data-theme="dark"] .card, [data-theme="dark"] .gauge-container, [data-theme="dark"] .modal-content { background-color: #2c3e50; }
-    [data-theme="dark"] h1 { color: var(--secondary); }
-    [data-theme="dark"] td { color: #bdc3c7; border-color: #34495e; }
-    [data-theme="dark"] th { background: #34495e; color: var(--secondary); border-color: #2c3e50; }
-    [data-theme="dark"] .card.blue-card { background: #34495e; }
-    [data-theme="dark"] .user-profile { background: #233140; }
-    [data-theme="dark"] input, [data-theme="dark"] select { background: #34495e; color: white; border-color: #7f8c8d; }
-
     [data-theme="brazil"] {
       --primary: #009c3b; /* Verde */
       --secondary: #ffdf00; /* Amarelo */
@@ -98,12 +75,11 @@
     .theme-switcher { display: flex; gap: 8px; padding: 5px; background: rgba(0,0,0,0.05); border-radius: 20px; }
     .theme-btn { width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
     .theme-btn[data-theme-id="porto"] { background-color: #004691; }
-    .theme-btn[data-theme-id="dark"] { background-color: #2c3e50; }
     .theme-btn[data-theme-id="brazil"] { background-color: #009c3b; }
     .theme-btn[data-theme-id="pink"] { background-color: #d81b60; }
 
     .tab-section { display: none; animation: fadeIn 0.4s ease; }
-    .tab-section.active { display: block; }
+    .tab-section.active { display: block;}
     @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
     /* CARDS E DASHBOARD (Mantidos os originais) */
@@ -179,6 +155,40 @@
 
     .admin-header-actions { display: flex; align-items: center; gap: 20px; }
     .hidden { display: none !important; }
+
+    /*Alinhamento da tab venda para centralização*/
+    /* Centraliza o H1 e o formulário dentro da aba */
+.tab-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  text-align: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.box-blue {
+  width: 100%;
+  max-width: 600px;          /* Limita a largura máxima para não esticar demais */
+  border: 1.5px solid #0076ff;
+  border-radius: 8px;
+  background-color: #ffffff;
+  padding: 25px;
+  box-sizing: border-box;
+  box-shadow: 0 4px 12px rgba(0, 118, 255, 0.05);
+  text-align: left;          /* Mantém os textos internos (Data, Produto...) alinhados à esquerda */
+}
+
+.center-container{
+  display: flex;
+  flex-direction: column;
+  align-items: center;    
+  justify-content: flex-start;
+  width: 100%;              
+  box-sizing: border-box;
+}
   </style>
 </head>
 <body data-theme="porto">
@@ -205,7 +215,6 @@
         <h1>Painel de Resultados</h1>
         <div id="theme-switcher-resumo" class="theme-switcher hidden">
           <button title="Tema Porto" class="theme-btn" data-theme-id="porto" onclick="changeTheme('porto')"></button>
-          <button title="Tema Escuro" class="theme-btn" data-theme-id="dark" onclick="changeTheme('dark')"></button>
           <button title="Tema Brasil" class="theme-btn" data-theme-id="brazil" onclick="changeTheme('brazil')"></button>
           <button title="Tema Rosa" class="theme-btn" data-theme-id="pink" onclick="changeTheme('pink')"></button>
         </div>
@@ -270,8 +279,9 @@
     </div>
 
     <div id="venda" class="tab-section">
+    <div class="center-container">
       <h1>Nova Venda</h1>
-      <div class="box" style="max-width: 600px;">
+      <div class="box-blue">
         <form id="formVenda" onsubmit="submitVenda(event)">
           <div class="form-group">
             <label>Data</label>
@@ -283,7 +293,7 @@
           </div>
           <div class="form-group">
             <label>Protocolo</label>
-            <input type="text" name="protocolo" placeholder="Ex: 2024..." required>
+            <input type="text" name="cpf/protocolo" placeholder="Ex:111.111..." required>
           </div>
           <div class="form-group">
             <label>Quantidade</label>
@@ -292,6 +302,7 @@
           <button type="submit" class="btn">Confirmar Venda</button>
         </form>
       </div>
+      </div>
     </div>
 
     <div id="equipe" class="tab-section">
@@ -299,7 +310,6 @@
         <h1>Gestão da Equipe</h1>
         <div id="theme-switcher-equipe" class="theme-switcher hidden">
           <button title="Tema Porto" class="theme-btn" data-theme-id="porto" onclick="changeTheme('porto')"></button>
-          <button title="Tema Escuro" class="theme-btn" data-theme-id="dark" onclick="changeTheme('dark')"></button>
           <button title="Tema Brasil" class="theme-btn" data-theme-id="brazil" onclick="changeTheme('brazil')"></button>
           <button title="Tema Rosa" class="theme-btn" data-theme-id="pink" onclick="changeTheme('pink')"></button>
         </div>
@@ -370,7 +380,6 @@
           <button id="btnViewLogs" class="btn hidden" style="width: auto; background: #7f8c8d;" onclick="openLogsModal()">Ver Logs de Auditoria</button>
           <div id="theme-switcher-admin" class="theme-switcher hidden">
             <button title="Tema Porto" class="theme-btn" data-theme-id="porto" onclick="changeTheme('porto')"></button>
-            <button title="Tema Escuro" class="theme-btn" data-theme-id="dark" onclick="changeTheme('dark')"></button>
             <button title="Tema Brasil" class="theme-btn" data-theme-id="brazil" onclick="changeTheme('brazil')"></button>
             <button title="Tema Rosa" class="theme-btn" data-theme-id="pink" onclick="changeTheme('pink')"></button>
           </div>
@@ -500,42 +509,57 @@
       document.getElementById('userProfile').innerHTML = htmlUser;
     }
 
-    function _setupNavigation(user) {
-      const cargo = user.cargo.toLowerCase();
-      const permissions = {
-        adm: { tabs: ['resumo', 'venda', 'equipe', 'admin'], initial: 'resumo' },
-        supervisor: { tabs: ['equipe'], initial: 'equipe' },
-        atendente: { tabs: ['resumo', 'venda'], initial: 'resumo' },
-        operador: { tabs: ['resumo', 'venda'], initial: 'resumo' }
-      };
-      const userPermissions = permissions[cargo] || permissions.atendente;
+ function _setupNavigation(user) {
+  const cargo = user.cargo.toLowerCase();
+  
+  // 1. Definição das abas permitidas por cargo
+  const permissions = {
+    adm: { tabs: ['resumo', 'venda', 'equipe', 'admin'], initial: 'resumo' },
+    supervisor: { tabs: ['equipe', 'admin'], initial: 'equipe' }, // <-- Atualizado aqui!
+    atendente: { tabs: ['resumo', 'venda'], initial: 'resumo' },
+    operador: { tabs: ['resumo', 'venda'], initial: 'resumo' }
+  };
+  
+  const userPermissions = permissions[cargo] || permissions.atendente;
 
-      document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
-        btn.classList.toggle('hidden', !userPermissions.tabs.includes(btn.dataset.tab));
-      });
+  // 2. Controla a visibilidade dos botões do menu
+  document.querySelectorAll('.nav-btn[data-tab]').forEach(btn => {
+    btn.classList.toggle('hidden', !userPermissions.tabs.includes(btn.dataset.tab));
+  });
 
-      if (cargo === 'adm') {
-        google.script.run.withSuccessHandler(teams => {
-          const sel = document.getElementById('selEquipeAdmin');
-          sel.innerHTML = '<option value="">Selecione...</option>';
-          teams.forEach(t => sel.add(new Option(t, t)));
-        }).getUniqueTeams();
+  // 3. Carrega as equipes caso o usuário seja ADM ou Supervisor
+  if (['adm', 'supervisor'].includes(cargo)) {
+    google.script.run.withSuccessHandler(teams => {
+      const sel = document.getElementById('selEquipeAdmin');
+      if (sel) {
+        sel.innerHTML = '<option value="">Selecione...</option>';
+        teams.forEach(t => sel.add(new Option(t, t)));
       }
+    }).getUniqueTeams();
+  }
 
-      document.getElementById('btnViewLogs').classList.toggle('hidden', cargo !== 'adm');
+  // 4. O botão de ver Logs continua exclusivo do ADM (conforme seu code.gs)
+  const btnLogs = document.getElementById('btnViewLogs');
+  if (btnLogs) {
+    btnLogs.classList.toggle('hidden', cargo !== 'adm');
+  }
 
-      // Visibilidade do seletor de tema
-      document.querySelectorAll('.theme-switcher').forEach(sw => sw.classList.add('hidden'));
-      if (['atendente', 'operador'].includes(cargo)) {
-        document.getElementById('theme-switcher-resumo').classList.remove('hidden');
-      } else if (cargo === 'supervisor') {
-        document.getElementById('theme-switcher-equipe').classList.remove('hidden');
-      } else if (cargo === 'adm') {
-        document.getElementById('theme-switcher-admin').classList.remove('hidden');
-      }
+  // 5. Visibilidade do seletor de tema (Corrigido para minúsculas)
+  document.querySelectorAll('.theme-switcher').forEach(sw => sw.classList.add('hidden'));
+  
+  if (['atendente', 'operador'].includes(cargo)) {
+    const swResumo = document.getElementById('theme-switcher-resumo');
+    if (swResumo) swResumo.classList.remove('hidden');
+  } else if (cargo === 'supervisor') {
+    const swEquipe = document.getElementById('theme-switcher-equipe');
+    if (swEquipe) swEquipe.classList.remove('hidden');
+  } else if (cargo === 'adm') {
+    const swAdmin = document.getElementById('theme-switcher-admin');
+    if (swAdmin) swAdmin.classList.remove('hidden');
+  }
 
-      return userPermissions.initial;
-    }
+  return userPermissions.initial;
+}
 
     function _populateResumoData(data) {
       document.getElementById('dashTotal').textContent = data.totalVendas;
@@ -594,9 +618,12 @@
         const fragment = document.createDocumentFragment();
         data.membros.forEach(m => {
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${m.nome}<br><small style="color:#888;">${m.email}</small></td>
-                        <td>${m.cargo}</td>
-                        <td><button class="btn btn-danger" onclick="excluirMembro('${m.email}')">Remover</button></td>`;
+          tr.innerHTML = `<td style="max-width: 250px; vertical-align: middle;">
+  <span style="display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${m.nome}</span>
+  <small style="color:#888; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${m.email}">${m.email}</small>
+</td>
+<td>${m.cargo}</td>
+<td style="white-space: nowrap; width: 1%;"><button class="btn btn-danger" onclick="excluirMembro('${m.email}')">Remover</button></td>`;
           fragment.appendChild(tr);
         });
         tbody.appendChild(fragment);

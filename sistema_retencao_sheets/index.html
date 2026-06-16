@@ -5,10 +5,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Retenção geral</title>
-    
+   
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
-    
+   
     <style>
       :root {
         --primary-color: #004aad;
@@ -76,56 +76,56 @@
 
       /* --- Estilos Base com Variáveis --- */
       body { background-color: var(--bg-color); color: var(--text-color); font-family: 'Segoe UI', system-ui, sans-serif; }
-      
+     
       /* Sidebar */
-      .sidebar { 
-        height: 100vh; 
-        background: linear-gradient(180deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%); 
-        color: white; 
-        position: fixed; 
-        width: 250px; 
-        padding-top: 20px; 
-        z-index: 1000; 
+      .sidebar {
+        height: 100vh;
+        background: linear-gradient(180deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%);
+        color: white;
+        position: fixed;
+        width: 250px;
+        padding-top: 20px;
+        z-index: 1000;
         overflow-y: auto;
       }
       .sidebar h3 { text-align: center; font-weight: 300; letter-spacing: 1px; }
-      .sidebar .nav-link { 
-        color: var(--sidebar-text); 
-        margin: 5px 15px; 
-        border-radius: 8px; 
-        transition: all 0.3s; 
-        cursor: pointer; 
+      .sidebar .nav-link {
+        color: var(--sidebar-text);
+        margin: 5px 15px;
+        border-radius: 8px;
+        transition: all 0.3s;
+        cursor: pointer;
       }
-      .sidebar .nav-link:hover, .sidebar .nav-link.active { 
-        background: rgba(255,255,255,0.15); 
-        color: var(--sidebar-text-active); 
-        transform: translateX(5px); 
+      .sidebar .nav-link:hover, .sidebar .nav-link.active {
+        background: rgba(255,255,255,0.15);
+        color: var(--sidebar-text-active);
+        transform: translateX(5px);
       }
       .sidebar .nav-link i { margin-right: 10px; width: 20px; text-align: center; }
-      
+     
       /* Main Content */
       .main-content { margin-left: 250px; padding: 25px; }
-      
+     
       /* Cards & KPIs */
       .card-kpi { border: none; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: transform 0.2s; background: white; }
       .card-kpi:hover { transform: translateY(-3px); box-shadow: 0 6px 12px rgba(0,0,0,0.08); }
-      
+     
       .hidden { display: none !important; }
-      
-      .user-badge { 
-        background: rgba(255,255,255,0.1); 
-        padding: 15px; 
-        margin: 0 15px 20px; 
-        border-radius: 10px; 
-        text-align: center; 
+     
+      .user-badge {
+        background: rgba(255,255,255,0.1);
+        padding: 15px;
+        margin: 0 15px 20px;
+        border-radius: 10px;
+        text-align: center;
         border: 1px solid rgba(255,255,255,0.1);
       }
-      
+     
       /* Chart Containers */
       .chart-container-sm { position: relative; height: 180px; width: 100%; }
       .chart-container-lg { position: relative; height: 250px; width: 100%; }
       .sup-filter { max-width: 300px; margin-bottom: 20px; }
-      
+     
       /* Tabela com Header Fixo */
       .table-responsive { scrollbar-width: thin; }
       /* Estilo do Toast (Notificações Flutuantes) */
@@ -135,17 +135,17 @@
   <body>
 
     <div class="toast-container" id="toastContainer"></div>
-    
+   
     <div class="sidebar d-flex flex-column">
       <h3>Retenção</h3>
       <hr style="border-color: rgba(255,255,255,0.2);">
-      
+     
       <div id="userInfo">
         <div class="text-center text-white-50 p-3">Carregando usuário...</div>
       </div>
-      
+     
       <hr style="border-color: rgba(255,255,255,0.2); margin: 10px 0;">
-      
+     
       <nav class="nav flex-column">
         <a class="nav-link hidden" onclick="showTab('tab1')"><i class="bi bi-speedometer2"></i> Status (Meus Resultados)</a>
         <a class="nav-link hidden" onclick="showTab('tab2')"><i class="bi bi-pencil-square"></i> Registrar Retenção</a>
@@ -154,14 +154,14 @@
         <a class="nav-link hidden" onclick="showTab('tab4')"><i class="bi bi-gear-fill"></i> Administração</a>
       </nav>
     </div>
-    
+   
 
     <div class="main-content">
-      
+     
       <div id="tab1" class="tab-section hidden">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h3 class="mb-0" style="color: var(--secondary-color);"><i class="bi bi-person-badge"></i> Meus Resultados</h3>
-            
+           
             <div class="d-flex align-items-center">
                 <div class="dropdown">
                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle me-2" type="button" id="themeDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="Trocar Tema">
@@ -179,9 +179,9 @@
                 </button>
             </div>
         </div>
-        
+       
         <div class="row mb-4">
-    
+   
     <div class="col-md-4 mb-3 mb-md-0">
         <div class="card shadow-sm h-100 border-primary border-top border-4">
             <div class="card-body">
@@ -236,21 +236,21 @@
             <div class="card-body">
                 <h6 class="text-success fw-bold mb-1"><i class="bi bi-currency-dollar"></i> COMISSÃO ESTIMADA</h6>
                 <h2 class="fw-bold text-success mb-3" id="comissaoTotal">R$ 0,00</h2>
-                
+               
                 <div class="d-flex justify-content-between small border-bottom pb-1 mb-1">
-                    <span class="text-muted">Cartão (Arg/Inc):</span> 
+                    <span class="text-muted">Cartão (Arg/Inc):</span>
                     <b class="text-dark" id="comissaoCC">R$ 0,00</b>
                 </div>
                 <div class="d-flex justify-content-between small border-bottom pb-1 mb-1">
-                    <span class="text-muted">Conta Digital:</span> 
+                    <span class="text-muted">Conta Digital:</span>
                     <b class="text-dark" id="comissaoCD">R$ 0,00</b>
                 </div>
                 <div class="d-flex justify-content-between small border-bottom pb-1 mb-1">
-                    <span class="text-muted">Bônus Cashback:</span> 
+                    <span class="text-muted">Bônus Cashback:</span>
                     <b class="text-dark" id="comissaoCashback">R$ 0,00</b>
                 </div>
                 <div class="d-flex justify-content-between small">
-                    <span class="text-muted">Massificados:</span> 
+                    <span class="text-muted">Massificados:</span>
                     <b class="text-dark" id="comissaoMass">R$ 0,00</b>
                 </div>
             </div>
@@ -293,15 +293,16 @@
 
         <div id="cardTeamCharts" class="card p-3 mb-3">
             <h5 class="text-secondary"><i class="bi bi-people"></i> Visão Geral da Minha Equipe</h5>
-            
+           
             <div class="row text-center mt-3">
                 <div class="col-md-4">
                     <h6>CARTÃO DE CRÉDITO</h6>
                     <div style="height: 200px; position: relative;">
-                        <canvas id="canvasTeamCC"></canvas> </div>
+                        <canvas id="chartTeamCC"></canvas> </div>
                     <div class="mt-2 small fw-bold">
-                        <span class="text-success">Ret: <span id="teamQtdCCRet">0</span></span> | 
-                        <span class="text-warning">Arg: <span id="teamQtdCCArg">0</span></span> | 
+                        <span class="text-info">Total atd: <span id="teamQtdCCAtd">0</span></span> |
+                        <span class="text-success">Ret: <span id="teamQtdCCRet">0</span></span> |
+                        <span class="text-warning">Arg: <span id="teamQtdCCArg">0</span></span> |
                         <span class="text-danger">Canc: <span id="teamQtdCCCanc">0</span></span>
                     </div>
                 </div>
@@ -309,9 +310,10 @@
                 <div class="col-md-4">
                     <h6>CONTA DIGITAL</h6>
                     <div style="height: 200px; position: relative;">
-                        <canvas id="canvasTeamCD"></canvas> </div>
+                        <canvas id="chartTeamCD"></canvas> </div>
                     <div class="mt-2 small fw-bold">
-                        <span class="text-success">Ret: <span id="teamQtdCDRet">0</span></span> | 
+                      <span class="text-info">Total atd: <span id="teamQtdCDAtd">0</span></span> |
+                        <span class="text-success">Ret: <span id="teamQtdCDRet">0</span></span> |
                         <span class="text-danger">Canc: <span id="teamQtdCDCanc">0</span></span>
                     </div>
                 </div>
@@ -319,15 +321,16 @@
                 <div class="col-md-4">
                     <h6>TROCA DE PONTOS</h6>
                     <div style="height: 200px; position: relative;">
-                        <canvas id="canvasTeamPt"></canvas> </div>
+                        <canvas id="chartTeamPts"></canvas> </div>
                     <div class="mt-2 small fw-bold">
-                        <span class="text-info">Cash: <span id="teamQtdCash">0</span></span> | 
+                      <span class="text-info">Total atd: <span id="teamQtdAtdPontos">0</span></span> |
+                        <span class="text-info">Cash: <span id="teamQtdCash">0</span></span> |
                         <span class="text-warning">Milha: <span id="teamQtdMilha">0</span></span>
                     </div>
                 </div>
             </div>
         </div>
-        
+       
         <div class="row g-3">
             <div class="col-md-4">
                 <div class="card card-kpi p-3">
@@ -430,12 +433,23 @@
                <div class="card card-kpi p-3">
                   <h6 class="text-center text-primary">Cartão de Crédito</h6>
                   <div class="chart-container-lg"><canvas id="chartSupCC"></canvas></div>
+                  <div class="mt-2 small fw-bold">
+                        <span class="text-info">Total atd: <span id="supQtdCCAtd">0</span></span> |
+                        <span class="text-success">Ret: <span id="supQtdCCRet">0</span></span> |
+                        <span class="text-warning">Arg: <span id="supQtdCCArg">0</span></span> |
+                        <span class="text-danger">Canc: <span id="supQtdCCCanc">0</span></span>
+                    </div>
                </div>
             </div>
             <div class="col-md-4">
                <div class="card card-kpi p-3">
                   <h6 class="text-center text-success">Conta Digital</h6>
                   <div class="chart-container-lg"><canvas id="chartSupCD"></canvas></div>
+                  <div class="mt-2 small fw-bold">
+                        <span class="text-info">Total atd: <span id="supQtdCDAtd">0</span></span> |
+                        <span class="text-success">Ret: <span id="supQtdCDRet">0</span></span> |
+                        <span class="text-danger">Canc: <span id="supQtdCDCanc">0</span></span>
+                        </div>
                </div>
             </div>
             <div class="col-md-4">
@@ -443,7 +457,7 @@
                   <h6 class="text-center text-warning">Troca de Pontos</h6>
                   <div class="chart-container-lg"><canvas id="chartSupPts"></canvas></div>
                   <div class="text-center mt-2 small">
-                      Cash: <b id="supQtdCash">0</b> | Milhas: <b id="supQtdMilha">0</b>
+                     Atd Total: <b id="supQtdAtdPontos">0</b> | Cash: <b id="supQtdCash">0</b> | Milhas: <b id="supQtdMilha">0</b>
                   </div>
                </div>
             </div>
@@ -492,7 +506,7 @@
       <div id="tab5" class="tab-section hidden">
           <div class="d-flex justify-content-between align-items-center mb-4">
               <h3 class="mb-0"><i class="bi bi-trophy-fill"></i> Ranking de Performance da Equipe</h3>
-              
+             
               <div id="ranking-period-filter" class="btn-group btn-group-sm" role="group">
                   <input type="radio" class="btn-check" name="rankingPeriod" id="rankingTotal" autocomplete="off" value="total" checked>
                   <label class="btn btn-outline-primary" for="rankingTotal">Desde o Início</label>
@@ -553,7 +567,7 @@
                       <button class="btn btn-primary w-100" onclick="cadastrarUsuario()">Salvar / Atualizar</button>
                   </div>
               </div>
-              
+             
               <div class="col-md-6">
                   <div class="card card-kpi p-4 mb-3">
                       <h5>Gestão de Acesso</h5>
@@ -609,10 +623,10 @@
     // Variáveis para armazenar as instâncias dos gráficos (permite destruir antes de recriar)
     let chartSupCC = null, chartSupCD = null, chartSupPts = null;
     let chartTeamCC = null, chartTeamCD = null, chartTeamPts = null;
-    
+   
     let modalRel = null;
     let currentRelType = '';
-    let currentUser = null; 
+    let currentUser = null;
 
     Chart.register(ChartDataLabels); // Registra o plugin de labels
 
@@ -620,7 +634,7 @@
     function setTheme(themeName) {
         // Remove todas as classes de tema possíveis antes de adicionar a nova
         document.body.classList.remove('theme-dark', 'theme-rosa', 'theme-brasil');
-        
+       
         if (themeName !== 'default') {
             document.body.classList.add('theme-' + themeName);
         }
@@ -634,7 +648,7 @@
 
     window.onload = function() {
         modalRel = new bootstrap.Modal(document.getElementById('modalRelatorio'));
-        
+       
         // MELHORIA: CACHE DE SESSÃO
         const savedTheme = localStorage.getItem('retencao_theme');
         if (savedTheme) {
@@ -644,7 +658,7 @@
         }
 
         const cachedUser = sessionStorage.getItem('retencao_userInfo');
-        
+       
         if (cachedUser) {
             setupUser(JSON.parse(cachedUser));
         } else {
@@ -665,7 +679,7 @@
         document.getElementById('inputData').valueAsDate = new Date();
         };
 
-        toggleForm(); 
+        toggleForm();
 
         // 2. Carrega supervisores para cadastro
         const selSup = document.getElementById('newSupervisor');
@@ -679,11 +693,11 @@
         };
 
     function setupUser(user) {
-        if(!user || user.error) { 
-            document.getElementById('userInfo').innerHTML = `<div class="p-3 bg-danger text-white rounded m-2">Erro: ${user ? user.error : 'Desconhecido'}</div>`; 
-            return; 
+        if(!user || user.error) {
+            document.getElementById('userInfo').innerHTML = `<div class="p-3 bg-danger text-white rounded m-2">Erro: ${user ? user.error : 'Desconhecido'}</div>`;
+            return;
         }
-        
+       
         currentUser = user;
 
         const nome = user.nome.split(' ')[0];
@@ -702,21 +716,21 @@
         allNavs.forEach(l => l.classList.add('hidden'));
 
         let startTab = 'tab1';
-        
+       
         if(user.cargo === 'ADM') {
             allNavs.forEach(l => l.classList.remove('hidden'));
-            startTab = 'tab3'; 
+            startTab = 'tab3';
         } else if (user.cargo === 'Supervisor') {
-            document.querySelector('.nav-link[onclick*="tab3"]').classList.remove('hidden'); 
+            document.querySelector('.nav-link[onclick*="tab3"]').classList.remove('hidden');
             document.querySelector('.nav-link[onclick*="tab5"]').classList.remove('hidden');
-            document.querySelector('.nav-link[onclick*="tab4"]').classList.remove('hidden'); 
+            document.querySelector('.nav-link[onclick*="tab4"]').classList.remove('hidden');
             startTab = 'tab3';
         } else {
             // Atendente
             document.querySelector('.nav-link[onclick*="tab1"]').classList.remove('hidden');
             document.querySelector('.nav-link[onclick*="tab2"]').classList.remove('hidden');
         }
-        
+       
         showTab(startTab);
         loadAllData(user);
     }
@@ -743,9 +757,9 @@
                 renderDashboard(data.pessoal, data.equipe);
             }
         }).getDashboardData();
-        
+       
         if (user.cargo === 'Supervisor' || user.cargo === 'ADM') {
-            updateSupervisorStats(); 
+            updateSupervisorStats();
         }
     }
 
@@ -771,21 +785,21 @@ function carregarUltimosRegistros() {
   google.script.run
     .withSuccessHandler(registros => {
       tbody.innerHTML = '';
-      
+     
       if(!registros || registros.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted small">Nenhum registro recente encontrado.</td></tr>';
         return;
       }
-      
+     
       registros.forEach(r => {
         // LÓGICA NOVA: Define o nome amigável do produto
         let nomeProduto = r.produto;
-        
+       
         // Se for Massificado e tiver um subproduto válido, junta os dois
         if (r.produto === 'Massificado' && r.subProduto && r.subProduto !== '-') {
           nomeProduto = `Massificado (${r.subProduto})`;
         }
-        
+       
         tbody.innerHTML += `
           <tr>
             <td class="small fw-bold" title="${nomeProduto}">${nomeProduto}</td>
@@ -820,9 +834,9 @@ function carregarUltimosRegistros() {
 
     lista.forEach(item => {
         // Como o Code.gs agora manda "dd/MM/yyyy", usamos direto como chave
-        let diaKey = item.data; 
-        
-        // Se por algum motivo a data ainda vier no formato ISO (2023-10-15...), 
+        let diaKey = item.data;
+       
+        // Se por algum motivo a data ainda vier no formato ISO (2023-10-15...),
         // este pequeno bloco limpa ela:
         if (diaKey.includes('-')) {
             const partes = diaKey.split('T')[0].split('-');
@@ -830,9 +844,9 @@ function carregarUltimosRegistros() {
         }
 
         if (!diario[diaKey]) {
-            diario[diaKey] = { 
-                cc: { total: 0, ret: 0, arg: 0, canc: 0 }, 
-                cd: { total: 0, ret: 0, canc: 0 } 
+            diario[diaKey] = {
+                cc: { total: 0, ret: 0, arg: 0, canc: 0 },
+                cd: { total: 0, ret: 0, canc: 0 }
             };
         }
 
@@ -859,7 +873,7 @@ function carregarUltimosRegistros() {
 
     // --- FUNÇÕES DE COR (STATUS & LÓGICA) ---
     function getClassStatusCC(pctRet, pctArg) {
-        if (pctRet >= 78 && pctArg >= 44) return 'text-primary'; 
+        if (pctRet >= 78 && pctArg >= 44) return 'text-primary';
         if (pctRet >= 76 && pctArg >= 42) return 'text-info';
         if (pctRet >= 75) return 'text-success';
         if ((pctRet >= 73 && pctRet < 75) || (pctArg >= 37 && pctArg < 40)) return 'text-warning';
@@ -867,49 +881,55 @@ function carregarUltimosRegistros() {
     }
 
     function getClassStatusCD(pctRet) {
-        if (pctRet > 78) return 'text-primary'; 
-        if (pctRet >= 76) return 'text-info';   
-        if (pctRet >= 75) return 'text-success'; 
-        if (pctRet >= 30 && pctRet <= 50) return 'text-warning'; 
-        if (pctRet < 30) return 'text-danger'; 
-        return ''; 
+        if (pctRet > 78) return 'text-primary';
+        if (pctRet >= 76) return 'text-info';  
+        if (pctRet >= 75) return 'text-success';
+        if (pctRet >= 30 && pctRet <= 50) return 'text-warning';
+        if (pctRet < 30) return 'text-danger';
+        return '';
     }
 
     function getArgColorClass(pct) {
-        if (pct >= 40) return 'text-success'; 
-        if (pct >= 35) return 'text-warning'; 
+        if (pct >= 40) return 'text-success';
+        if (pct >= 35) return 'text-warning';
         return 'text-danger';
     }
 
 function renderTeamCharts(equipeStats) {
     if (!equipeStats) return;
-
+   
     const ccRet = equipeStats.cartao.retidoTotal || 0;
     const ccArg = equipeStats.cartao.retidoArg || 0;
     const ccCanc = equipeStats.cartao.cancelado || 0;
+    const ccAtd = ccRet + ccCanc; // Total atendido: total cancelado + total retido
 
     const cdRet = equipeStats.conta.retido || 0;
     const cdCanc = equipeStats.conta.cancelado || 0;
+    const cdAtd = cdRet + cdCanc;
 
     const ptCash = equipeStats.pontos.cashback || 0;
     const ptMilha = equipeStats.pontos.milhas || 0;
+    const ptAtd = ptCash + ptMilha;
 
+    document.getElementById('teamQtdCCAtd').innerText  = ccAtd;
     document.getElementById('teamQtdCCRet').innerText = ccRet;
     document.getElementById('teamQtdCCArg').innerText = ccArg;
     document.getElementById('teamQtdCCCanc').innerText = ccCanc;
 
+    document.getElementById('teamQtdCDAtd').innerText = cdAtd;
     document.getElementById('teamQtdCDRet').innerText = cdRet;
     document.getElementById('teamQtdCDCanc').innerText = cdCanc;
 
     document.getElementById('teamQtdCash').innerText = ptCash;
     document.getElementById('teamQtdMilha').innerText = ptMilha;
+    document.getElementById('teamQtdAtdPontos').innerText = ptAtd;
 
     const commonOptions = {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-            legend: { display: false }, 
-            tooltip: { // Tooltip continua mostrando valor e porcentagem
+            legend: { display: false },
+            tooltip: {
                 callbacks: {
                     label: function(context) {
                         let value = context.raw || 0;
@@ -919,48 +939,45 @@ function renderTeamCharts(equipeStats) {
                     }
                 }
             },
-            datalabels: { // Configuração para exibir os labels no gráfico
+            datalabels: {
                 formatter: (value, context) => {
-                    if (value <= 0) return null; // Não exibe label para valores 0
+                    if (value <= 0) return null;
                     const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
                     const percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '';
                     return percentage;
                 },
                 color: '#fff',
-                font: {
-                    weight: 'bold',
-                    size: 12,
-                },
+                font: { weight: 'bold', size: 12 },
                 textShadowBlur: 2,
                 textShadowColor: 'rgba(0, 0, 0, 0.5)'
-                }
             }
         }
     };
 
-    const colorRet = '#198754'; 
-    const colorArg = '#ffc107'; 
-    const colorCanc = '#dc3545'; 
-    const colorInfo = '#0dcaf0'; 
+    const colorRet = '#198754';
+    const colorArg = '#ffc107';
+    const colorCanc = '#dc3545';
+    const colorInfo = '#0dcaf0';
 
-    const ctxCC = document.getElementById('canvasTeamCC');
+    const ctxCC = document.getElementById('chartTeamCC');
     if (ctxCC) {
-        if (chartTeamCC) chartTeamCC.destroy(); 
+        if (chartTeamCC) chartTeamCC.destroy();
         chartTeamCC = new Chart(ctxCC, {
             type: 'pie',
             data: {
                 labels: ['Retidos', 'Argumentados', 'Cancelados'],
                 datasets: [{
+                    // Subtrai o argumento do retido total para a pizza não estourar 100%
                     data: [ccRet - ccArg, ccArg, ccCanc],
                     backgroundColor: [colorRet, colorArg, colorCanc],
                     borderWidth: 1
                 }]
             },
-            options: commonOptions 
+            options: commonOptions
         });
     }
 
-    const ctxCD = document.getElementById('canvasTeamCD');
+    const ctxCD = document.getElementById('chartTeamCD');
     if (ctxCD) {
         if (chartTeamCD) chartTeamCD.destroy();
         chartTeamCD = new Chart(ctxCD, {
@@ -973,11 +990,11 @@ function renderTeamCharts(equipeStats) {
                     borderWidth: 1
                 }]
             },
-            options: commonOptions 
+            options: commonOptions
         });
     }
 
-    const ctxPt = document.getElementById('canvasTeamPt');
+    const ctxPt = document.getElementById('chartTeamPts');
     if (ctxPt) {
         if (chartTeamPts) chartTeamPts.destroy();
         chartTeamPts = new Chart(ctxPt, {
@@ -990,9 +1007,10 @@ function renderTeamCharts(equipeStats) {
                     borderWidth: 1
                 }]
             },
-            options: commonOptions 
+            options: commonOptions
         });
     }
+}
 
 
     // --- GESTÃO SUPERVISOR ---
@@ -1001,159 +1019,169 @@ function renderTeamCharts(equipeStats) {
         google.script.run.withSuccessHandler(renderSupervisorDashboard).getSupervisorData(filtroEmail);
     }
 
-    function renderSupervisorDashboard(data) {
-        if(!data) return;
-        const stats = data.geral;
-        
-        const sel = document.getElementById('supFilterAgent');
-        if(data.equipe && sel.options.length <= 1) { 
-            data.equipe.forEach(m => sel.add(new Option(m.nome, m.email)));
-        }
+ function renderSupervisorDashboard(data) {
+    if(!data) return;
+    const stats = data.geral;
+   
+    const sel = document.getElementById('supFilterAgent');
+    if(data.equipe && sel.options.length <= 1) {
+        data.equipe.forEach(m => sel.add(new Option(m.nome, m.email)));
+    }
 
-        const tbU = document.getElementById('tbodyGestaoAtendentes');
-        tbU.innerHTML='';
-        if(data.equipe) {
-            data.equipe.forEach(u => {
-                tbU.innerHTML += `<tr><td>${u.nome}</td><td class="text-end"><button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${u.email}')"><i class="bi bi-trash"></i></button></td></tr>`;
-            });
-        }
-
-        const commonOpt = {
-            responsive:true, maintainAspectRatio:false,
-            plugins: { 
-                legend: {position:'bottom'}, 
-                tooltip: {callbacks:{label: c=>c.label+': '+c.raw+'%'}},
-                datalabels: {
-                    formatter: (value, context) => {
-                        if (value <= 0) return null;
-                        return value.toFixed(1) + '%';
-                    },
-                    color: '#fff',
-                    font: {
-                        weight: 'bold'
-                    },
-                    textShadowBlur: 2,
-                    textShadowColor: 'rgba(0, 0, 0, 0.5)'
-                }
-            }
-        };
-
-        const totalCC = stats.cartao.retidoTotal + stats.cartao.cancelado; 
-        const pCCRet = parseFloat(calcPct(stats.cartao.retidoTotal, totalCC).toFixed(1));
-        const pCCArg = parseFloat(calcPct(stats.cartao.retidoArg, stats.cartao.retidoTotal).toFixed(1)); 
-        const pCCCanc = parseFloat(calcPct(stats.cartao.cancelado, totalCC).toFixed(1));
-
-        if(chartSupCC) chartSupCC.destroy();
-        chartSupCC = new Chart(document.getElementById('chartSupCC'), {
-            type: 'pie',
-            data: { 
-                labels: ['Retenção', 'Ret. Argumentação', 'Cancelado'],
-                datasets: [{ data: [pCCRet, pCCArg, pCCCanc], backgroundColor: ['#0d6efd','#198754','#dc3545'] }]
-            },
-            options: commonOpt
-        });
-
-        const totalCD = stats.conta.retido + stats.conta.cancelado;
-        const pCDRet = parseFloat(calcPct(stats.conta.retido, totalCD).toFixed(1));
-        const pCDCanc = parseFloat(calcPct(stats.conta.cancelado, totalCD).toFixed(1));
-
-        if(chartSupCD) chartSupCD.destroy();
-        chartSupCD = new Chart(document.getElementById('chartSupCD'), {
-            type: 'pie',
-            data: { 
-                labels: ['Retidos', 'Cancelados'],
-                datasets: [{ data: [pCDRet, pCDCanc], backgroundColor: ['#198754','#dc3545'] }]
-            },
-            options: commonOpt
-        });
-
-        const ptsTotal = (stats.pontos.cashback + stats.pontos.milhas) || 0;
-        const pCash = parseFloat(calcPct(stats.pontos.cashback, ptsTotal).toFixed(1));
-        const pMilha = parseFloat(calcPct(stats.pontos.milhas, ptsTotal).toFixed(1));
-
-        if(chartSupPts) chartSupPts.destroy();
-        chartSupPts = new Chart(document.getElementById('chartSupPts'), {
-            type: 'pie',
-            data: { 
-                labels: ['Cashback', 'Milhas'],
-                datasets: [{ data: [pCash, pMilha], backgroundColor: ['#0dcaf0','#ffc107'] }]
-            },
-            options: commonOpt
-        });
-        document.getElementById('supQtdCash').innerText = stats.pontos.cashback;
-        document.getElementById('supQtdMilha').innerText = stats.pontos.milhas;
-
-        const tbCC = document.getElementById('tbodyDiaCredito');
-        const tbCD = document.getElementById('tbodyDiaConta');
-        tbCC.innerHTML=''; tbCD.innerHTML='';
-
-        // Otimização: Processa a lista de registros para agrupar por dia
-        const dadosDiarios = processarDiarioAgente(data.geral.lista);
-
-        const hoje = new Date();
-        const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
-
-        for (let i = 1; i <= ultimoDia; i++) {
-            const dataChave = `${String(i).padStart(2,'0')}/${String(hoje.getMonth()+1).padStart(2,'0')}/${hoje.getFullYear()}`;
-            // REATORAÇÃO: Usa os dados processados localmente, que seguem o mesmo padrão do dashboard do agente
-            const dia = dadosDiarios[dataChave] || { cc: { total:0, ret:0, arg:0, canc:0 }, cd: { total:0, ret:0, canc:0 } };
-
-            const diaTotalCC = dia.cc.ret + dia.cc.canc;
-            const pdRet = calcPct(dia.cc.ret, diaTotalCC).toFixed(2);
-            const pdArg = calcPct(dia.cc.arg, dia.cc.ret).toFixed(2); 
-            
-            const colorRetCC = pdRet > 73 ? 'text-success' : 'text-danger';
-            const colorArgCC = pdArg > 35 ? 'text-success' : 'text-danger';
-
-            tbCC.innerHTML += `<tr>
-                <td>${dataChave}</td>
-                <td>${diaTotalCC}</td>
-                <td class="text-sucess fw-bold">${dia.cc.ret}</td>
-                <td class="${colorRetCC}">${pdRet}%</td>
-                <td class="${colorArgCC} fw-bold">${pdArg}%</td>
-                <td class="text-danger">${dia.cc.canc}</td>
-            </tr>`;
-            
-            const diaTotalCD = dia.cd.ret + dia.cd.canc;
-            const pcdRet = calcPct(dia.cd.ret, diaTotalCD).toFixed(2);
-            
-            let colorRetCD = 'text-danger';
-            if (pcdRet > 75) colorRetCD = 'text-success';
-            else if (pcdRet >= 30 && pcdRet <= 75) colorRetCD = 'text-warning';
-
-            tbCD.innerHTML += `<tr>
-                <td>${dataChave}</td>
-                <td>${diaTotalCD}</td>
-                <td class="${colorRetCD} fw-bold">${dia.cd.ret}</td>
-                <td class="${colorRetCD}">${pcdRet}%</td>
-                <td class="text-danger">${dia.cd.canc}</td>
-            </tr>`;
-        }
-
-        const tbM = document.getElementById('tbodyMassificadosEquipe');
-        tbM.innerHTML = '';
-        const listM = ["SPPR / Bolsa Protegida", "Adicional", "Acidentes Pessoais", "Identidade protegida", "Seguro RE", "Martelinho de Ouro", "Quitação fatura"];
-        listM.forEach(nome => {
-            const v = stats.massificado[nome] || { arg: 0, troca: 0, canc: 0 };
-            tbM.innerHTML += `<tr><td>${nome}</td><td class="text-center">${v.arg}</td><td class="text-center">${v.troca}</td><td class="text-center text-danger">${v.canc}</td></tr>`;
+    const tbU = document.getElementById('tbodyGestaoAtendentes');
+    tbU.innerHTML='';
+    if(data.equipe) {
+        data.equipe.forEach(u => {
+            tbU.innerHTML += `<tr><td>${u.nome}</td><td class="text-end"><button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${u.email}')"><i class="bi bi-trash"></i></button></td></tr>`;
         });
     }
+
+    const commonOpt = {
+        responsive:true, maintainAspectRatio:false,
+        plugins: {
+            legend: {position:'bottom'},
+            tooltip: {callbacks:{label: c=>c.label+': '+c.raw+'%'}},
+            datalabels: {
+                formatter: (value, context) => {
+                    if (value <= 0) return null;
+                    return value.toFixed(1) + '%';
+                },
+                color: '#fff',
+                font: { weight: 'bold' },
+                textShadowBlur: 2,
+                textShadowColor: 'rgba(0, 0, 0, 0.5)'
+            }
+        }
+    };
+
+    // Ajuste da Lógica do Cartão de Crédito Geral
+    const totalCC = stats.cartao.retidoTotal + stats.cartao.cancelado;
+   
+    // As fatias devem ser calculadas com base no Total Atendido para fechar 100%
+    const pCCRet = parseFloat(calcPct(stats.cartao.retidoTotal - stats.cartao.retidoArg, totalCC).toFixed(1));
+    const pCCArg = parseFloat(calcPct(stats.cartao.retidoArg, totalCC).toFixed(1));
+    const pCCCanc = parseFloat(calcPct(stats.cartao.cancelado, totalCC).toFixed(1));
+
+    if(chartSupCC) chartSupCC.destroy();
+    chartSupCC = new Chart(document.getElementById('chartSupCC'), {
+        type: 'pie',
+        data: {
+            labels: ['Retenção', 'Ret. Argumentação', 'Cancelado'],
+            datasets: [{ data: [pCCRet, pCCArg, pCCCanc], backgroundColor: ['#0d6efd','#198754','#dc3545'] }]
+        },
+        options: commonOpt
+    });
+
+    // Força a atualização dos contadores de CC também no painel do supervisor
+    document.getElementById('supQtdCCAtd').innerText = totalCC;
+    document.getElementById('supQtdCCRet').innerText = stats.cartao.retidoTotal;
+    document.getElementById('supQtdCCArg').innerText = stats.cartao.retidoArg;
+    document.getElementById('supQtdCCCanc').innerText = stats.cartao.cancelado;
+
+    const totalCD = stats.conta.retido + stats.conta.cancelado;
+    const pCDRet = parseFloat(calcPct(stats.conta.retido, totalCD).toFixed(1));
+    const pCDCanc = parseFloat(calcPct(stats.conta.cancelado, totalCD).toFixed(1));
+
+    if(chartSupCD) chartSupCD.destroy();
+    chartSupCD = new Chart(document.getElementById('chartSupCD'), {
+        type: 'pie',
+        data: {
+            labels: ['Retidos', 'Cancelados'],
+            datasets: [{ data: [pCDRet, pCDCanc], backgroundColor: ['#198754','#dc3545'] }]
+        },
+        options: commonOpt
+    });
+
+    document.getElementById('supQtdCDAtd').innerText = totalCD;
+    document.getElementById('supQtdCDRet').innerText = stats.conta.retido;
+    document.getElementById('supQtdCDCanc').innerText = stats.conta.cancelado;
+
+    const ptsTotal = (stats.pontos.cashback + stats.pontos.milhas) || 0;
+    const pCash = parseFloat(calcPct(stats.pontos.cashback, ptsTotal).toFixed(1));
+    const pMilha = parseFloat(calcPct(stats.pontos.milhas, ptsTotal).toFixed(1));
+
+    if(chartSupPts) chartSupPts.destroy();
+    chartSupPts = new Chart(document.getElementById('chartSupPts'), {
+        type: 'pie',
+        data: {
+            labels: ['Cashback', 'Milhas'],
+            datasets: [{ data: [pCash, pMilha], backgroundColor: ['#0dcaf0','#ffc107'] }]
+        },
+        options: commonOpt
+    });
+    document.getElementById('supQtdCash').innerText = stats.pontos.cashback;
+    document.getElementById('supQtdMilha').innerText = stats.pontos.milhas;
+    document.getElementById('supQtdAtdPontos').innerText = ptsTotal;
+
+    const tbCC = document.getElementById('tbodyDiaCredito');
+    const tbCD = document.getElementById('tbodyDiaConta');
+    tbCC.innerHTML=''; tbCD.innerHTML='';
+
+    const dadosDiarios = processarDiarioAgente(data.geral.lista);
+
+    const hoje = new Date();
+    const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
+
+    for (let i = 1; i <= ultimoDia; i++) {
+        const dataChave = `${String(i).padStart(2,'0')}/${String(hoje.getMonth()+1).padStart(2,'0')}/${hoje.getFullYear()}`;
+        const dia = dadosDiarios[dataChave] || { cc: { total:0, ret:0, arg:0, canc:0 }, cd: { total:0, ret:0, canc:0 } };
+
+        const diaTotalCC = dia.cc.ret + dia.cc.canc;
+        const pdRet = calcPct(dia.cc.ret, diaTotalCC).toFixed(2);
+        const pdArg = calcPct(dia.cc.arg, dia.cc.ret).toFixed(2);
+       
+        const colorRetCC = pdRet > 73 ? 'text-success' : 'text-danger';
+        const colorArgCC = pdArg > 35 ? 'text-success' : 'text-danger';
+
+        tbCC.innerHTML += `<tr>
+            <td>${dataChave}</td>
+            <td>${diaTotalCC}</td>
+            <td class="text-sucess fw-bold">${dia.cc.ret}</td>
+            <td class="${colorRetCC}">${pdRet}%</td>
+            <td class="${colorArgCC} fw-bold">${pdArg}%</td>
+            <td class="text-danger">${dia.cc.canc}</td>
+        </tr>`;
+       
+        const diaTotalCD = dia.cd.ret + dia.cd.canc;
+        const pcdRet = calcPct(dia.cd.ret, diaTotalCD).toFixed(2);
+       
+        let colorRetCD = 'text-danger';
+        if (pcdRet > 75) colorRetCD = 'text-success';
+        else if (pcdRet >= 30 && pcdRet <= 75) colorRetCD = 'text-warning';
+
+        tbCD.innerHTML += `<tr>
+            <td>${dataChave}</td>
+            <td>${diaTotalCD}</td>
+            <td class="${colorRetCD} fw-bold">${dia.cd.ret}</td>
+            <td class="${colorRetCD}">${pcdRet}%</td>
+            <td class="text-danger">${dia.cd.canc}</td>
+        </tr>`;
+    }
+
+    const tbM = document.getElementById('tbodyMassificadosEquipe');
+    tbM.innerHTML = '';
+    const listM = ["SPPR / Bolsa Protegida", "Adicional", "Acidentes Pessoais", "Identidade protegida", "Seguro RE", "Martelinho de Ouro", "Quitação fatura"];
+    listM.forEach(nome => {
+        const v = stats.massificado[nome] || { arg: 0, troca: 0, canc: 0 };
+        tbM.innerHTML += `<tr><td>${nome}</td><td class="text-center">${v.arg}</td><td class="text-center">${v.troca}</td><td class="text-center text-danger">${v.canc}</td></tr>`;
+    });
+}
 
     // --- FORMULÁRIO E UTILITÁRIOS ---
     function toggleForm() {
         const t = document.getElementById('inputType').value;
         const res = document.getElementById('inputResult');
         const mass = document.getElementById('divMassificado');
-        res.innerHTML=''; 
+        res.innerHTML='';
         if(mass) mass.classList.add('hidden');
-        
+       
         const ops = {
             'Massificado': ['Retido por Argumentação', 'Retido por Troca de Produto', 'Cancelado'],
             'Troca de Pontos': ['Convertido em Cashback', 'Seguiu com Milhas'],
             'Cartão de Crédito': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
             'Conta Digital': ['Retido', 'Cancelado']
         };
-        
+       
         if(t==='Massificado' && mass) mass.classList.remove('hidden');
         (ops[t]||[]).forEach(o => res.add(new Option(o,o)));
     }
@@ -1162,7 +1190,7 @@ function renderTeamCharts(equipeStats) {
     const form = document.getElementById('formRetencao');
     const t = document.getElementById('inputType').value;
     const sub = form.querySelector('[name="subProduto"]');
-    
+   
     const data = {
         tipo: t,
         subProduto: (t === 'Massificado' && sub) ? sub.value : '-',
@@ -1170,27 +1198,27 @@ function renderTeamCharts(equipeStats) {
         dataAtendimento: document.getElementById('inputData').value,
         observacao: document.getElementById('inputObservacao').value
     };
-    
+   
     const btn = document.getElementById('btnSalvar');
-    btn.disabled = true; 
+    btn.disabled = true;
     btn.innerText = 'Salvando...';
-    
+   
     google.script.run
         .withSuccessHandler(msg => {
             // 1. Mostra o alerta de sucesso
             showToast(msg, 'success');
-            
+           
             // 2. Limpa o formulário e destrava o botão
             form.reset();
-            btn.disabled = false; 
+            btn.disabled = false;
             btn.innerText = 'Salvar Registro';
             document.getElementById('inputType').value = 'Cartão de Crédito';
             toggleForm();
-            
+           
             // 3. Atualiza os dados de fundo
             carregarUltimosRegistros();
-            if(currentUser) loadAllData(currentUser); 
-            
+            if(currentUser) loadAllData(currentUser);
+           
             // 4. A MÁGICA DA SUAVIDADE: Espera 1.5 segundos antes de trocar de tela
             // Assim o atendente consegue ler o "Registro salvo com sucesso!"
             setTimeout(() => {
@@ -1200,19 +1228,19 @@ function renderTeamCharts(equipeStats) {
         .withFailureHandler(err => {
             // Se der erro, avisa e NÃO volta para o dashboard
             showToast('Erro ao salvar!', 'danger');
-            btn.disabled = false; 
+            btn.disabled = false;
             btn.innerText = 'Salvar Registro';
         })
         .salvarRetencao(data);
 }
 
     function toggleRelatorio(t) { currentRelType=t; document.getElementById('lblTipoRel').innerText=t; modalRel.show(); }
-    
+   
     function downloadCSV() {
         const ini=document.getElementById('relInicio').value;
         const fim=document.getElementById('relFim').value;
         if(!ini||!fim) return showToast("Selecione as datas.", 'danger');
-        
+       
         google.script.run.withSuccessHandler(csv => {
             if(csv==='Vazio') return showToast("Sem dados no período.", 'danger');
             const blob = new Blob(["\ufeff", csv], {type:'text/csv;charset=utf-8'});
@@ -1223,7 +1251,7 @@ function renderTeamCharts(equipeStats) {
             modalRel.hide();
         }).gerarRelatorioCSV(ini, fim, currentRelType);
     }
-    
+   
     function cadastrarUsuario() {
         const dados = {
             email: document.getElementById('newEmail').value,
@@ -1235,7 +1263,7 @@ function renderTeamCharts(equipeStats) {
         if(!dados.email) return showToast("Preencha o email.", 'danger');
         google.script.run.withSuccessHandler(msg => showToast(msg, 'success')).cadastrarUsuario(dados);
     }
-    
+   
     function checkSupervisorField() {
         const c = document.getElementById('newCargo').value;
         const d = document.getElementById('divSupSelect');
@@ -1251,13 +1279,13 @@ function renderTeamCharts(equipeStats) {
             google.script.run.withSuccessHandler(msg => showToast(msg, 'success')).arquivarMes(finalId);
         }
     }
-    
-    function deleteUser(e) { 
+   
+    function deleteUser(e) {
         if(confirm("Deletar usuário "+e+"?")) {
-            google.script.run.withSuccessHandler(msg => showToast(msg, 'success')).excluirUsuario(e); 
+            google.script.run.withSuccessHandler(msg => showToast(msg, 'success')).excluirUsuario(e);
         }
     }
-    
+   
     function voltarParaDashboard() { showTab('tab1'); }
 
     function loadRankingData() {
@@ -1337,7 +1365,7 @@ function renderTeamCharts(equipeStats) {
     // Preenchendo o Card 1 (Cartão de Crédito)
     const pctGeralCC = calcPct(ccRet, totalAtendidosCC);
     const pctArgCC = calcPct(ccArg, ccRet);
-    
+   
     const elCC = document.getElementById('ccPctGeral');
     elCC.innerText = pctGeralCC.toFixed(2) + '%';
     elCC.className = "fs-2 fw-bold " + getClassStatusCC(pctGeralCC, pctArgCC);
@@ -1345,16 +1373,16 @@ function renderTeamCharts(equipeStats) {
     const elArg = document.getElementById('ccPctArg');
     elArg.innerText = pctArgCC.toFixed(2) + '%';
     elArg.className = "fs-2 fw-bold " + getArgColorClass(pctArgCC);
-    
+   
     if(document.getElementById('qtdCCTotal')) document.getElementById('qtdCCTotal').innerText = totalAtendidosCC;
     document.getElementById('qtdCCRetGeral').innerText = ccRet;
     document.getElementById('qtdCCCanc').innerText = ccCanc;
     document.getElementById('qtdCCArg').innerText = ccArg;
     if(document.getElementById('qtdCCInc')) document.getElementById('qtdCCInc').innerText = ccInc;
-    
+   
     // Preenchendo o Card 2 (Conta Digital)
     const pctGeralCD = calcPct(stats.conta.retido, totalAtendidosCD);
-    const pctCancCD = calcPct(stats.conta.cancelado, totalAtendidosCD); 
+    const pctCancCD = calcPct(stats.conta.cancelado, totalAtendidosCD);
 
     const elCD = document.getElementById('cdPctGeral');
     elCD.innerText = pctGeralCD.toFixed(2) + '%';
@@ -1363,11 +1391,11 @@ function renderTeamCharts(equipeStats) {
     if(document.getElementById('cdPctCanc')) {
         document.getElementById('cdPctCanc').innerText = pctCancCD.toFixed(2) + '%';
     }
-    
-    document.getElementById('qtdCDTotal').innerText = totalAtendidosCD; 
+   
+    document.getElementById('qtdCDTotal').innerText = totalAtendidosCD;
     document.getElementById('qtdCDRet').innerText = stats.conta.retido;
     document.getElementById('qtdCDCanc').innerText = stats.conta.cancelado;
-    
+   
     // Pontos (mantido igual)
     if(document.getElementById('qtdCashback')) document.getElementById('qtdCashback').innerText = stats.pontos.cashback;
     if(document.getElementById('qtdMilhas')) document.getElementById('qtdMilhas').innerText = stats.pontos.milhas;
@@ -1387,7 +1415,7 @@ function renderTeamCharts(equipeStats) {
     const dadosDiarios = processarDiarioAgente(stats.lista);
     const tbodyCC = document.getElementById('tbodyAgentDailyCC');
     const tbodyCD = document.getElementById('tbodyAgentDailyCD');
-    
+   
     if(tbodyCC && tbodyCD) {
         tbodyCC.innerHTML = ''; tbodyCD.innerHTML = '';
 
@@ -1402,7 +1430,7 @@ function renderTeamCharts(equipeStats) {
             const dataKey = `${diaStr}/${mesStr}/${anoAtual}`;
 
             const dia = dadosDiarios[dataKey] || { cc: { total:0, ret:0, arg:0, canc:0 }, cd: { total:0, ret:0, canc:0 } };
-            
+           
             const diaTotalCC = dia.cc.ret + dia.cc.canc;
             const pctRetCC = calcPct(dia.cc.ret, diaTotalCC);
             const pctArgDia = calcPct(dia.cc.arg, dia.cc.ret);
@@ -1420,7 +1448,7 @@ function renderTeamCharts(equipeStats) {
                 <td class="text-danger">${dia.cc.canc}</td>
             </tr>`;
 
-            const diaTotalCD = dia.cd.ret + dia.cd.canc; 
+            const diaTotalCD = dia.cd.ret + dia.cd.canc;
             const pctRetCD = calcPct(dia.cd.ret, diaTotalCD);
 
             let colorRetCD = 'text-danger';
@@ -1449,7 +1477,7 @@ function renderTeamCharts(equipeStats) {
         }
     }
 }
-    
+   
     </script>
   </body>
 </html>

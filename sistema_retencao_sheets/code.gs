@@ -144,31 +144,34 @@ function arquivarMes(idPlanilhaDestino) {
 function salvarRetencao(form) {
   const lock = LockService.getScriptLock();
   try {
-    lock.waitLock(10000);
+    // Aumentamos a tolerância da fila para 30 segundos (30000 ms)
+    lock.waitLock(30000);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Dados');
     const user = getUserInfo();
     
-    // A data agora vem do formulário, com um fallback para a data atual se não for enviada
-    const dataAtendimento = form.dataAtendimento ? new Date(form.dataAtendimento) : new Date();
+    const hoje = new Date();
     
-    // Estrutura: [Data, Email, Nome, Supervisor, Tipo, Sub, Res, Status, Observacao]
+    // Estrutura: [Data, Email, Nome, Supervisor, Tipo, Sub, Res, Status]
     sheet.appendRow([
-      dataAtendimento, 
+      hoje, 
       user.email, 
       user.nome,
       user.supervisor || '-',
       form.tipo,
       form.subProduto || '-',
       form.resultado,
-      'Ativo',
-      form.observacao || '' // Adiciona a observação (ou string vazia)
+      'Ativo'
     ]);
+
+    // MÁGICA PARA CONCORRÊNCIA: Força a gravação imediata antes de soltar o cadeado
+    SpreadsheetApp.flush();
     
     return "Registro salvo com sucesso!";
   } catch (e) {
     return "Erro ao salvar: " + e.message;
   } finally {
+    // Libera a planilha para o próximo da fila
     lock.releaseLock();
   }
 }
@@ -431,6 +434,96 @@ function calcularComissoes(stats) {
 
     return comissao;
 }
+
+// Comissão por retenção
+/*function calcularComissoes(stats) {
+    const calcPct = (num, den) => (den && den > 0) ? (num / den) * 100 : 0;
+    
+    let comissao = { cc: 0, cd: 0, cashback: 0, massificado: 0, total: 0 };
+    let valorCashback = 0;
+
+    // --- 1. CARTÃO DE CRÉDITO ---
+    const totalCC = stats.cartao.retidoTotal + stats.cartao.cancelado; // Base de cálculo: atendimentos finalizados
+    const retidoCC = stats.cartao.retidoTotal;
+    const argCC = stats.cartao.retidoArg;
+
+    const pctCC = calcPct(retidoCC, totalCC);
+    const pctArg = calcPct(argCC, retidoCC);
+
+    const incCC = retidoCC - argCC;
+
+    const VALOR_ARGUMENTACAO = 1.50;
+    const VALOR_INCENTIVO = 0.50;
+
+    const comissaoArg = argCC * VALOR_ARGUMENTACAO;
+    const comissaoInc = incCC * VALOR_INCENTIVO;
+
+    comissao.cc = comissaoArg + comissaoInc;
+
+    // --- 2. CONTA DIGITAL ---
+    const totalCD = stats.conta.retido + stats.conta.cancelado; // Base de cálculo: atendimentos finalizados
+    const pctConta = calcPct(stats.conta.retido, totalCD); 
+    
+    let comissaoConta = 0, bonusConta = 0; 
+    if (pctConta >= 75) comissaoConta = 200; 
+    else if (pctConta >= 50) comissaoConta = 150; 
+    else if (pctConta >= 30) comissaoConta = 100; 
+    
+    if (pctConta >= 78) bonusConta = 150; 
+    else if (pctConta >= 76) bonusConta = 100;
+
+    comissao.cd = comissaoConta + bonusConta;
+
+    // --- 3. CASHBACK ---
+    const qtdCashback = stats.pontos.cashback || 0; // Quantidade absoluta
+    const qtdMilhas = stats.pontos.milhas || 0
+    const totalTrocas = qtdCashback + qtdMilhas;
+    
+    const pctCashback = calcPct(qtdCashback, totalTrocas);
+
+    if (pctCashback >= 45) valorCashback = 130;
+    else if (pctCashback >= 42) valorCashback = 100;
+    else if (pctCashback >= 39) valorCashback = 70;
+    else if (pctCashback >= 36) valorCashback = 50;
+    
+    comissao.cashback = valorCashback;
+
+    // --- 4. MASSIFICADOS ---
+    // Esta é a lógica de comissão "por retenção".
+    // O valor pago por cada retenção (vArg, vInc) depende da % de performance do produto.
+    const listaPadrao = ["SPPR / Bolsa Protegida", "Adicional", "Acidentes Pessoais", "Identidade protegida", "Seguro RE", "Martelinho de Ouro", "Quitação fatura"];
+    let totalMass = 0;
+
+    listaPadrao.forEach(nome => {
+        const p = stats.massificado[nome] || { arg: 0, troca: 0, canc: 0 };
+        const pTotal = p.arg + p.troca + p.canc; // Total do produto específico
+        const pPctArg = calcPct(p.arg, pTotal);
+        const pPctInc = calcPct(p.troca, pTotal);
+
+        // Define o valor a ser pago por CADA retenção em argumentação
+        let vArg = 0;
+        if (pPctArg >= 60) vArg = 3.00;
+        else if (pPctArg >= 50) vArg = 2.50;
+        else if (pPctArg >= 30) vArg = 2.00;
+        else if (pPctArg >= 15) vArg = 1.50;
+        totalMass += (p.arg * vArg);
+
+        // Define o valor a ser pago por CADA retenção em troca/incentivo
+        let vInc = 0;
+        if (pPctInc >= 75) vInc = 2.00;
+        else if (pPctInc >= 70) vInc = 1.50;
+        else if (pPctInc >= 65) vInc = 1.25;
+        else if (pPctInc >= 60) vInc = 1.00;
+        totalMass += (p.troca * vInc);
+    });
+    
+    comissao.massificado = totalMass;
+
+    // --- 5. TOTALIZAÇÃO ---
+    comissao.total = comissao.cc + comissao.cd + comissao.cashback + comissao.massificado;
+
+    return comissao;
+}*/
 
 function getSupervisorData(filtroEmail) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
