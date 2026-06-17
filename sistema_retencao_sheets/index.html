@@ -37,7 +37,11 @@
         --sidebar-bg-end: #233140;
       }
       body.theme-dark .card-kpi, body.theme-dark .modal-content { background-color: var(--card-bg); color: var(--text-color); }
+      body.theme-dark .card, body.theme-dark .modal-content { background-color: var(--card-bg); color: var(--text-color); border-color: #4b5f71; }
       body.theme-dark .table { color: var(--text-color); --bs-table-striped-bg: rgba(0,0,0,0.15); --bs-table-hover-bg: rgba(0,0,0,0.25); }
+      body.theme-dark .table-light th, body.theme-dark .table-light td { background-color: #233140; color: #ecf0f1; border-color: #4b5f71; }
+      body.theme-dark .bg-light { background-color: #233140 !important; }
+      body.theme-dark .bg-danger-subtle { background-color: rgba(220, 53, 69, 0.2) !important; border: 1px solid #dc3545; }
       body.theme-dark .text-secondary { color: #bdc3c7 !important; }
       body.theme-dark .text-muted { color: #95a5a6 !important; }
       body.theme-dark .text-dark { color: #ecf0f1 !important; }
@@ -77,6 +81,16 @@
       /* --- Estilos Base com Variáveis --- */
       body { background-color: var(--bg-color); color: var(--text-color); font-family: 'Segoe UI', system-ui, sans-serif; }
      
+      /* --- Sincronização Dinâmica do Bootstrap com Nossos Temas --- */
+      .text-primary { color: var(--primary-color) !important; }
+      .bg-primary { background-color: var(--primary-color) !important; }
+      .border-primary { border-color: var(--primary-color) !important; }
+      .btn-primary { background-color: var(--primary-color); border-color: var(--primary-color); color: white; }
+      .btn-primary:hover, .btn-primary:focus { filter: brightness(0.85); background-color: var(--primary-color); border-color: var(--primary-color); color: white; }
+      .btn-outline-primary { color: var(--primary-color); border-color: var(--primary-color); }
+      .btn-outline-primary:hover, .btn-outline-primary:focus { color: white; background-color: var(--primary-color); border-color: var(--primary-color); }
+      .modal-header.bg-primary { background-color: var(--primary-color) !important; }
+
       /* Sidebar */
       .sidebar {
         height: 100vh;
@@ -130,6 +144,7 @@
       .table-responsive { scrollbar-width: thin; }
       /* Estilo do Toast (Notificações Flutuantes) */
       .toast-container { position: fixed; top: 20px; right: 20px; z-index: 1055; }
+      .sticky-header { position: sticky; top: 0; background-color: var(--card-bg); z-index: 5; }
     </style>
   </head>
   <body>
@@ -233,6 +248,7 @@
 
     <div class="col-md-4">
         <div class="card shadow-sm h-100 border-success border-top border-4" style="background-color: #f8fff9;">
+        <div class="card shadow-sm h-100 border-success border-top border-4">
             <div class="card-body">
                 <h6 class="text-success fw-bold mb-1"><i class="bi bi-currency-dollar"></i> COMISSÃO ESTIMADA</h6>
                 <h2 class="fw-bold text-success mb-3" id="comissaoTotal">R$ 0,00</h2>
@@ -267,6 +283,7 @@
                     <div class="table-responsive" style="max-height:250px">
                         <table class="table table-sm table-striped mb-0 text-center small">
                             <thead style="position:sticky; top:0; background:white; z-index: 5;">
+                            <thead class="sticky-header">
                                 <tr><th>Data</th><th>Atend.</th><th>Retido</th><th>% Ret</th><th>%Arg</th><th>Canc</th></tr>
                             </thead>
                             <tbody id="tbodyAgentDailyCC"></tbody>
@@ -282,6 +299,7 @@
                     <div class="table-responsive" style="max-height:250px">
                         <table class="table table-sm table-striped mb-0 text-center small">
                             <thead style="position:sticky; top:0; background:white; z-index: 5;">
+                            <thead class="sticky-header">
                                 <tr><th>Data</th><th>Atend.</th><th>Retido</th><th>% Ret</th><th>Canc</th></tr>
                             </thead>
                             <tbody id="tbodyAgentDailyCD"></tbody>
@@ -470,6 +488,7 @@
                     <div class="table-responsive" style="max-height:300px">
                         <table class="table table-sm table-striped mb-0 text-center">
                             <thead style="position:sticky; top:0; background:white;">
+                            <thead class="sticky-header">
                                 <tr><th>Data</th><th>Atend.</th><th>Retido</th><th>% Ret</th><th>% Arg</th> <th>Canc</th></tr>
                             </thead>
                             <tbody id="tbodyDiaCredito"></tbody>
@@ -483,6 +502,7 @@
                     <div class="table-responsive" style="max-height:300px">
                         <table class="table table-sm table-striped mb-0 text-center">
                             <thead style="position:sticky; top:0; background:white;">
+                            <thead class="sticky-header">
                                 <tr><th>Data</th><th>Atend.</th><th>Retido</th><th>% Ret</th><th>Canc</th></tr>
                             </thead>
                             <tbody id="tbodyDiaConta"></tbody>
@@ -640,6 +660,22 @@
         }
         // Salva a preferência do usuário no armazenamento local
         localStorage.setItem('retencao_theme', themeName);
+        
+        updateChartBorders();
+    }
+
+    function updateChartBorders() {
+        // Atualiza a borda dos gráficos de pizza para combinar com o fundo do modo escuro/claro
+        const style = getComputedStyle(document.body);
+        const cardBg = style.getPropertyValue('--card-bg').trim() || '#ffffff';
+        
+        const charts = [chartSupCC, chartSupCD, chartSupPts, chartTeamCC, chartTeamCD, chartTeamPts];
+        charts.forEach(chart => {
+            if(chart && chart.data && chart.data.datasets[0]) {
+                chart.data.datasets[0].borderColor = cardBg;
+                chart.update();
+            }
+        });
     }
 
 
@@ -676,7 +712,10 @@
             radio.addEventListener('change', loadRankingData);
         });
 
-        document.getElementById('inputData').valueAsDate = new Date();
+        const hoje = new Date();
+        const dataFormatada = new Date(hoje.getTime() - (hoje.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+        document.getElementById('inputData').value = dataFormatada;
+        document.getElementById('inputData').max = dataFormatada;
         };
 
         toggleForm();
@@ -767,15 +806,31 @@
     function showToast(message, type = 'success') {
       const toastContainer = document.getElementById('toastContainer');
       const bgClass = type === 'success' ? 'bg-success' : (type === 'danger' ? 'bg-danger' : 'bg-primary');
-      const toastHtml = `
-        <div class="toast align-items-center text-white ${bgClass} border-0 show" role="alert" aria-live="assertive" aria-atomic="true" style="margin-bottom: 10px;">
+      
+      const toastWrapper = document.createElement('div');
+      toastWrapper.innerHTML = `
+        <div class="toast align-items-center text-white ${bgClass} border-0 show toast-animated-enter" role="alert" aria-live="assertive" aria-atomic="true" style="margin-bottom: 10px;">
           <div class="d-flex">
             <div class="toast-body fw-bold">${message}</div>
-            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close" onclick="this.parentElement.parentElement.remove()"></button>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" aria-label="Close" onclick="closeToastAnim(this.closest('.toast'))"></button>
           </div>
         </div>`;
-      toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-      setTimeout(() => { if(toastContainer.firstChild) toastContainer.firstChild.remove(); }, 3500);
+        
+      const toastElement = toastWrapper.firstElementChild;
+      toastContainer.appendChild(toastElement);
+      
+      // Tempo de tela: 5 segundos para erro (danger), 3.5s para sucesso e infos
+      const timeout = type === 'danger' ? 5000 : 3500;
+      
+      setTimeout(() => { 
+          if(toastContainer.contains(toastElement)) closeToastAnim(toastElement); 
+      }, timeout);
+    }
+
+    function closeToastAnim(toastElement) {
+        if (!toastElement) return;
+        toastElement.classList.replace('toast-animated-enter', 'toast-animated-exit');
+        setTimeout(() => toastElement.remove(), 400); // Aguarda os 0.4s da animação antes de remover do HTML
     }
 
 function carregarUltimosRegistros() {
@@ -971,6 +1026,8 @@ function renderTeamCharts(equipeStats) {
                     data: [ccRet - ccArg, ccArg, ccCanc],
                     backgroundColor: [colorRet, colorArg, colorCanc],
                     borderWidth: 1
+                    borderWidth: 2,
+                    borderColor: getComputedStyle(document.body).getPropertyValue('--card-bg').trim() || '#ffffff'
                 }]
             },
             options: commonOptions
@@ -988,6 +1045,8 @@ function renderTeamCharts(equipeStats) {
                     data: [cdRet, cdCanc],
                     backgroundColor: [colorRet, colorCanc],
                     borderWidth: 1
+                    borderWidth: 2,
+                    borderColor: getComputedStyle(document.body).getPropertyValue('--card-bg').trim() || '#ffffff'
                 }]
             },
             options: commonOptions
@@ -1005,6 +1064,8 @@ function renderTeamCharts(equipeStats) {
                     data: [ptCash, ptMilha],
                     backgroundColor: [colorInfo, colorArg],
                     borderWidth: 1
+                    borderWidth: 2,
+                    borderColor: getComputedStyle(document.body).getPropertyValue('--card-bg').trim() || '#ffffff'
                 }]
             },
             options: commonOptions
@@ -1068,6 +1129,12 @@ function renderTeamCharts(equipeStats) {
         data: {
             labels: ['Retenção', 'Ret. Argumentação', 'Cancelado'],
             datasets: [{ data: [pCCRet, pCCArg, pCCCanc], backgroundColor: ['#0d6efd','#198754','#dc3545'] }]
+                datasets: [{ 
+                    data: [pCCRet, pCCArg, pCCCanc], 
+                    backgroundColor: ['#0d6efd','#198754','#dc3545'],
+                    borderWidth: 2,
+                    borderColor: getComputedStyle(document.body).getPropertyValue('--card-bg').trim() || '#ffffff'
+                }]
         },
         options: commonOpt
     });
@@ -1088,6 +1155,12 @@ function renderTeamCharts(equipeStats) {
         data: {
             labels: ['Retidos', 'Cancelados'],
             datasets: [{ data: [pCDRet, pCDCanc], backgroundColor: ['#198754','#dc3545'] }]
+                datasets: [{ 
+                    data: [pCDRet, pCDCanc], 
+                    backgroundColor: ['#198754','#dc3545'],
+                    borderWidth: 2,
+                    borderColor: getComputedStyle(document.body).getPropertyValue('--card-bg').trim() || '#ffffff'
+                }]
         },
         options: commonOpt
     });
@@ -1106,6 +1179,12 @@ function renderTeamCharts(equipeStats) {
         data: {
             labels: ['Cashback', 'Milhas'],
             datasets: [{ data: [pCash, pMilha], backgroundColor: ['#0dcaf0','#ffc107'] }]
+                datasets: [{ 
+                    data: [pCash, pMilha], 
+                    backgroundColor: ['#0dcaf0','#ffc107'],
+                    borderWidth: 2,
+                    borderColor: getComputedStyle(document.body).getPropertyValue('--card-bg').trim() || '#ffffff'
+                }]
         },
         options: commonOpt
     });
@@ -1213,6 +1292,10 @@ function renderTeamCharts(equipeStats) {
             btn.disabled = false;
             btn.innerText = 'Salvar Registro';
             document.getElementById('inputType').value = 'Cartão de Crédito';
+            const novaData = new Date();
+            const novaDataFormatada = new Date(novaData.getTime() - (novaData.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+            document.getElementById('inputData').value = novaDataFormatada;
+            document.getElementById('inputData').max = novaDataFormatada;
             toggleForm();
            
             // 3. Atualiza os dados de fundo

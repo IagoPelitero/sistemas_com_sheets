@@ -149,12 +149,17 @@ function salvarRetencao(form) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Dados');
     const user = getUserInfo();
-    
-    const hoje = new Date();
-    
+
+    // Usa a data enviada pelo formulário, corrigindo problemas de fuso horário
+    const dateParts = form.dataAtendimento.split('-'); // YYYY-MM-DD
+    // Define o horário para 12:00 (meio-dia) para evitar que o fuso horário retroceda a data para o dia anterior
+    const dataCorreta = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], 12, 0, 0);
+    // Formata explicitamente para o padrão brasileiro (DD/MM/YYYY)
+    const dataFormatada = Utilities.formatDate(dataCorreta, Session.getScriptTimeZone(), "dd/MM/yyyy");
+
     // Estrutura: [Data, Email, Nome, Supervisor, Tipo, Sub, Res, Status]
     sheet.appendRow([
-      hoje, 
+      dataFormatada,
       user.email, 
       user.nome,
       user.supervisor || '-',
@@ -435,96 +440,6 @@ function calcularComissoes(stats) {
     return comissao;
 }
 
-// Comissão por retenção
-/*function calcularComissoes(stats) {
-    const calcPct = (num, den) => (den && den > 0) ? (num / den) * 100 : 0;
-    
-    let comissao = { cc: 0, cd: 0, cashback: 0, massificado: 0, total: 0 };
-    let valorCashback = 0;
-
-    // --- 1. CARTÃO DE CRÉDITO ---
-    const totalCC = stats.cartao.retidoTotal + stats.cartao.cancelado; // Base de cálculo: atendimentos finalizados
-    const retidoCC = stats.cartao.retidoTotal;
-    const argCC = stats.cartao.retidoArg;
-
-    const pctCC = calcPct(retidoCC, totalCC);
-    const pctArg = calcPct(argCC, retidoCC);
-
-    const incCC = retidoCC - argCC;
-
-    const VALOR_ARGUMENTACAO = 1.50;
-    const VALOR_INCENTIVO = 0.50;
-
-    const comissaoArg = argCC * VALOR_ARGUMENTACAO;
-    const comissaoInc = incCC * VALOR_INCENTIVO;
-
-    comissao.cc = comissaoArg + comissaoInc;
-
-    // --- 2. CONTA DIGITAL ---
-    const totalCD = stats.conta.retido + stats.conta.cancelado; // Base de cálculo: atendimentos finalizados
-    const pctConta = calcPct(stats.conta.retido, totalCD); 
-    
-    let comissaoConta = 0, bonusConta = 0; 
-    if (pctConta >= 75) comissaoConta = 200; 
-    else if (pctConta >= 50) comissaoConta = 150; 
-    else if (pctConta >= 30) comissaoConta = 100; 
-    
-    if (pctConta >= 78) bonusConta = 150; 
-    else if (pctConta >= 76) bonusConta = 100;
-
-    comissao.cd = comissaoConta + bonusConta;
-
-    // --- 3. CASHBACK ---
-    const qtdCashback = stats.pontos.cashback || 0; // Quantidade absoluta
-    const qtdMilhas = stats.pontos.milhas || 0
-    const totalTrocas = qtdCashback + qtdMilhas;
-    
-    const pctCashback = calcPct(qtdCashback, totalTrocas);
-
-    if (pctCashback >= 45) valorCashback = 130;
-    else if (pctCashback >= 42) valorCashback = 100;
-    else if (pctCashback >= 39) valorCashback = 70;
-    else if (pctCashback >= 36) valorCashback = 50;
-    
-    comissao.cashback = valorCashback;
-
-    // --- 4. MASSIFICADOS ---
-    // Esta é a lógica de comissão "por retenção".
-    // O valor pago por cada retenção (vArg, vInc) depende da % de performance do produto.
-    const listaPadrao = ["SPPR / Bolsa Protegida", "Adicional", "Acidentes Pessoais", "Identidade protegida", "Seguro RE", "Martelinho de Ouro", "Quitação fatura"];
-    let totalMass = 0;
-
-    listaPadrao.forEach(nome => {
-        const p = stats.massificado[nome] || { arg: 0, troca: 0, canc: 0 };
-        const pTotal = p.arg + p.troca + p.canc; // Total do produto específico
-        const pPctArg = calcPct(p.arg, pTotal);
-        const pPctInc = calcPct(p.troca, pTotal);
-
-        // Define o valor a ser pago por CADA retenção em argumentação
-        let vArg = 0;
-        if (pPctArg >= 60) vArg = 3.00;
-        else if (pPctArg >= 50) vArg = 2.50;
-        else if (pPctArg >= 30) vArg = 2.00;
-        else if (pPctArg >= 15) vArg = 1.50;
-        totalMass += (p.arg * vArg);
-
-        // Define o valor a ser pago por CADA retenção em troca/incentivo
-        let vInc = 0;
-        if (pPctInc >= 75) vInc = 2.00;
-        else if (pPctInc >= 70) vInc = 1.50;
-        else if (pPctInc >= 65) vInc = 1.25;
-        else if (pPctInc >= 60) vInc = 1.00;
-        totalMass += (p.troca * vInc);
-    });
-    
-    comissao.massificado = totalMass;
-
-    // --- 5. TOTALIZAÇÃO ---
-    comissao.total = comissao.cc + comissao.cd + comissao.cashback + comissao.massificado;
-
-    return comissao;
-}*/
-
 function getSupervisorData(filtroEmail) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const wsUsers = ss.getSheetByName("Usuarios");
@@ -601,14 +516,24 @@ function getRankingData(periodo) {
   let dadosFiltrados = todosOsDados;
   const hoje = new Date();
 
+  // Função auxiliar de segurança caso a planilha traga a data no formato texto 'DD/MM/YYYY'
+  const parseDateSegura = (d) => {
+    if (d instanceof Date) return d;
+    if (typeof d === 'string' && d.includes('/')) {
+      const p = d.split('/');
+      return new Date(p[2], p[1] - 1, p[0]);
+    }
+    return new Date(d);
+  };
+
   if (periodo === 'mensal') {
     const inicioDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    dadosFiltrados = todosOsDados.filter(row => new Date(row[0]) >= inicioDoMes);
+    dadosFiltrados = todosOsDados.filter(row => parseDateSegura(row[0]) >= inicioDoMes);
   } else if (periodo === 'semanal') {
     const seteDiasAtras = new Date();
     seteDiasAtras.setHours(0, 0, 0, 0);
     seteDiasAtras.setDate(hoje.getDate() - 7);
-    dadosFiltrados = todosOsDados.filter(row => new Date(row[0]) >= seteDiasAtras);
+    dadosFiltrados = todosOsDados.filter(row => parseDateSegura(row[0]) >= seteDiasAtras);
   }
 
   const ranking = [];
@@ -653,8 +578,18 @@ function gerarRelatorioCSV(inicio, fim, tipoRelatorio) {
 
   let csvContent = "Data,Email,Nome,Supervisor,Produto,SubProduto,Resultado\n";
 
+  // Função auxiliar de segurança para não corromper o relatório
+  const parseDateSegura = (d) => {
+    if (d instanceof Date) return d;
+    if (typeof d === 'string' && d.includes('/')) {
+      const p = d.split('/');
+      return new Date(p[2], p[1] - 1, p[0]);
+    }
+    return new Date(d);
+  };
+
   const filtrados = data.slice(1).filter(row => {
-    const dataRow = new Date(row[0]); 
+    const dataRow = parseDateSegura(row[0]); 
     if (dataRow < dInicio || dataRow > dFim) return false;
 
     if (tipoRelatorio === 'Pessoal') {
@@ -671,7 +606,7 @@ function gerarRelatorioCSV(inicio, fim, tipoRelatorio) {
   if (filtrados.length === 0) return "Vazio";
 
   filtrados.forEach(row => {
-    let dataFormatada = Utilities.formatDate(new Date(row[0]), Session.getScriptTimeZone(), "dd/MM/yyyy");
+    let dataFormatada = Utilities.formatDate(parseDateSegura(row[0]), Session.getScriptTimeZone(), "dd/MM/yyyy");
     let linha = `"${dataFormatada}","${row[1]}","${row[2]}","${row[3]}","${row[4]}","${row[5]}","${row[6]}"`;
     csvContent += linha + "\n";
   });

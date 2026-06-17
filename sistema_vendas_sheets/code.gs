@@ -362,7 +362,17 @@ function exportarRelatorioEquipe() {
     if (!['supervisor', 'adm'].includes(user.cargo.toLowerCase())) return { error: "Sem permissão." };
     const dados = getSpreadsheet().getSheetByName(SHEETS.VENDAS).getRange(1, 1, getSpreadsheet().getSheetByName(SHEETS.VENDAS).getLastRow(), 6).getValues();
     const filtro = dados.filter((row, idx) => idx === 0 || row[4] === user.equipe || user.cargo.toLowerCase() === 'adm');
-    const arquivo = DriveApp.createFile("Relatorio_" + user.equipe + ".csv", filtro.map(row => row.join(";")).join("\n"), MimeType.CSV);
+    
+    // Formata a data corretamente para que não apareça o texto extenso do objeto Date
+    const csvContent = filtro.map(row => {
+      let linhaFormatada = [...row];
+      if (linhaFormatada[0] instanceof Date) {
+        linhaFormatada[0] = Utilities.formatDate(linhaFormatada[0], Session.getScriptTimeZone(), "dd/MM/yyyy");
+      }
+      return linhaFormatada.join(";");
+    }).join("\n");
+
+    const arquivo = DriveApp.createFile("Relatorio_" + user.equipe + ".csv", csvContent, MimeType.CSV);
     arquivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     registrarLog("EXPORTAR_RELATORIO", "Equipe: " + user.equipe);
     return { url: arquivo.getDownloadUrl(), id: arquivo.getId() };
