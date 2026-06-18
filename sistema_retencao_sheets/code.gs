@@ -142,7 +142,7 @@ function arquivarMes(idPlanilhaDestino) {
 
 // --- 3. REGISTRO DE DADOS ---
 function salvarRetencao(form) {
-  const lock = LockService.getScriptLock();
+const lock = LockService.getScriptLock();
   try {
     // Aumentamos a tolerância da fila para 30 segundos (30000 ms)
     lock.waitLock(30000);
@@ -335,6 +335,7 @@ function processarEstatisticas(rows) {
   return stats;
 }
 
+
 // =======================================================================================
 // ======================= FUNÇÃO CENTRAL DE CÁLCULO DE COMISSÃO =======================
 // =======================================================================================
@@ -356,24 +357,15 @@ function calcularComissoes(stats) {
     const pctCC = calcPct(retidoCC, totalCC);
     const pctArg = calcPct(argCC, retidoCC);
 
-    let comissaoCC = 0, comissaoArg = 0, bonusCC = 0;
+    const incCC = retidoCC - argCC;
 
-    // Lógica por atingimento de % de Retenção
-    if (pctCC >= 75) comissaoCC = 200; 
-    else if (pctCC >= 74) comissaoCC = 180; 
-    else if (pctCC >= 73) comissaoCC = 150;
-    
-    // Lógica por atingimento de % de Argumentação (só paga se a retenção mínima for atingida)
-    if (pctCC >= 73) {
-        if (pctArg >= 40) comissaoArg = 200; 
-        else if (pctArg >= 38) comissaoArg = 150; 
-        else if (pctArg >= 35) comissaoArg = 100;
-    }
-    
-    if (pctCC >= 78 && pctArg >= 44) bonusCC = 200; 
-    else if (pctCC >= 75 && pctArg >= 42) bonusCC = 100; 
+    const VALOR_ARGUMENTACAO = 1.50;
+    const VALOR_INCENTIVO = 0.50;
 
-    comissao.cc = comissaoCC + comissaoArg + bonusCC;
+    const comissaoArg = argCC * VALOR_ARGUMENTACAO;
+    const comissaoInc = incCC * VALOR_INCENTIVO;
+
+    comissao.cc = comissaoArg + comissaoInc;
 
     // --- 2. CONTA DIGITAL ---
     const totalCD = stats.conta.retido + stats.conta.cancelado; // Base de cálculo: atendimentos finalizados
