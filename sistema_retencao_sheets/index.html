@@ -346,7 +346,7 @@
 
     <div class="toast-container" id="toastContainer"></div>
 
-    <div class="sidebar d-flex flex-column">
+    <aside class="sidebar d-flex flex-column">
         <h3>Retenção</h3>
         <hr style="border-color: rgba(255,255,255,0.2);">
 
@@ -365,13 +365,13 @@
             <a class="nav-link hidden" onclick="showTab('tab5')"><i class="bi bi-trophy-fill"></i> Ranking da Equipe</a>
             <a class="nav-link hidden" onclick="showTab('tab4')"><i class="bi bi-gear-fill"></i> Administração</a>
         </nav>
-    </div>
+    </aside>
 
 
-    <div class="main-content">
+    <main class="main-content">
 
-        <div id="tab1" class="tab-section hidden">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+        <section id="tab1" class="tab-section hidden">
+            <header class="d-flex justify-content-between align-items-center mb-4">
                 <h3 class="mb-0" style="color: var(--secondary-color);"><i class="bi bi-person-badge"></i> Meus
                     Resultados</h3>
 
@@ -396,7 +396,7 @@
                         <i class="bi bi-download"></i> Baixar Meu Histórico
                     </button>
                 </div>
-            </div>
+            </header>
 
             <div class="row mb-4">
 
@@ -422,6 +422,8 @@
                                         id="qtdCCRetGeral">0</span></div>
                                 <div class="col" title="Retidos na Argumentação">Arg.<br><span class="text-success fs-6"
                                         id="qtdCCArg">0</span></div>
+                                <div class="col" title="Retidos no Incentivo">Inc.<br><span class="text-warning fs-6"
+                                        id="qtdCCInc">0</span></div>
                                 <div class="col" title="Total Cancelados">Canc.<br><span class="text-danger fs-6"
                                         id="qtdCCCanc">0</span></div>
                             </div>
@@ -603,9 +605,9 @@
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div id="tab2" class="tab-section hidden">
+        <section id="tab2" class="tab-section hidden">
             <div class="card card-kpi p-4 mb-4" style="max-width: 600px; margin: 0 auto;">
                 <h4 class="mb-4 text-center">Novo Registro</h4>
                 <form id="formRetencao" onsubmit="event.preventDefault(); submitForm();">
@@ -784,10 +786,10 @@
                     </table>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div id="tab5" class="tab-section hidden">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+        <section id="tab5" class="tab-section hidden">
+            <header class="d-flex justify-content-between align-items-center mb-4">
                 <h3 class="mb-0"><i class="bi bi-trophy-fill"></i> Ranking de Performance da Equipe</h3>
 
                 <div id="ranking-period-filter" class="btn-group btn-group-sm" role="group">
@@ -803,7 +805,7 @@
                         value="semanal">
                     <label class="btn btn-outline-primary" for="rankingSemanal">Últimos 7 Dias</label>
                 </div>
-            </div>
+            </header>
 
             <div class="card card-kpi">
                 <div class="card-body p-0">
@@ -830,9 +832,9 @@
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div id="tab4" class="tab-section hidden">
+        <section id="tab4" class="tab-section hidden">
             <div class="row">
                 <div class="col-md-6">
                     <div class="card card-kpi p-4 mb-3">
@@ -874,9 +876,9 @@
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-    </div>
+    </main>
 
     <div class="modal fade" id="modalRelatorio" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
@@ -1392,7 +1394,7 @@
             chartSupCC = new Chart(document.getElementById('chartSupCC'), {
                 type: 'pie',
                 data: {
-                    labels: ['Retenção', 'Ret. Argumentação', 'Cancelado'],
+                    labels: ['Ret. Incentivo', 'Ret. Argumentação', 'Cancelado'],
                     datasets: [{ data: [pCCRet, pCCArg, pCCCanc], backgroundColor: ['#0d6efd', '#198754', '#dc3545'] }]
                 },
                 options: commonOpt
@@ -1462,7 +1464,7 @@
                 tbCC.innerHTML += `<tr>
             <td>${dataChave}</td>
             <td>${diaTotalCC}</td>
-            <td class="text-sucess fw-bold">${dia.cc.ret}</td>
+            <td class="text-success fw-bold">${dia.cc.ret}</td>
             <td class="${colorRetCC}">${pdRet}%</td>
             <td class="${colorArgCC} fw-bold">${pdArg}%</td>
             <td class="text-danger">${dia.cc.canc}</td>
