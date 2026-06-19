@@ -2,7 +2,7 @@
  * Contém: LockService, Projeção de Meta, Auditoria, Comissões, Permissões e Relatórios
  */
 
-jsconst SPREADSHEET_ID = 'id_sheets';
+const SPREADSHEET_ID = 'id_sheets';
 
 const SHEETS = {
   VENDAS: "vendas_ativas",
@@ -10,6 +10,25 @@ const SHEETS = {
   USUARIOS: "equipes_e_usuarios",
   METAS: "metas_e_resumo",
   LOGS: "logs_auditoria"
+};
+
+const ROLES = {
+  ADMIN: 'adm',
+  SUPERVISOR: 'supervisor',
+  ATTENDANT: 'atendente',
+  OPERATOR: 'operador'
+};
+
+const CACHE_DURATION = {
+  SHORT: 300,      // 5 minutos
+  MEDIUM: 900,     // 15 minutos
+  LONG: 3600       // 1 hora
+};
+
+const LOCK_TIMEOUT = {
+  SHORT: 5000,
+  MEDIUM: 10000,
+  LONG: 30000
 };
 
 function getSpreadsheet() { return SpreadsheetApp.openById(SPREADSHEET_ID); }
@@ -21,10 +40,92 @@ function doGet(e) {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
+// ============================================================================
+// UTILITÁRIOS - CACHE, LOGGING E VALIDAÇÃO
+// ============================================================================
+
+/**
+ * Wrapper para cache com callback
+ */
+function getCachedData(cacheKey, callback, expiration = CACHE_DURATION.MEDIUM) {
+  const cache = CacheService.getScriptCache();
+  const cachedValue = cache.get(cacheKey);
+  
+  if (cachedValue) {
+    return JSON.parse(cachedValue);
+  }
+  
+  const freshData = callback();
+  
+  if (freshData && !freshData.error) {
+    cache.put(cacheKey, JSON.stringify(freshData), expiration);
+  }
+  
+  return freshData;
+}
+
+/**
+ * Registra ações no sheet de logs
+ */
+function registrarLog(acao, detalhes) {
+  try {
+    const ss = getSpreadsheet();
+    let ws = ss.getSheetByName(SHEETS.LOGS);
+    if (!ws) { 
+      ws = ss.insertSheet(SHEETS.LOGS); 
+      ws.appendRow(["DATA/HORA", "USUÁRIO", "AÇÃO", "DETALHES"]); 
+    }
+    const agora = Utilities.formatDate(new Date(), "GMT-3", "dd/MM/yyyy HH:mm:ss");
+    ws.appendRow([agora, Session.getActiveUser().getEmail(), acao, detalhes]);
+  } catch(e) {
+    console.error("Falha ao registrar log: " + e.message);
+  }
+}
+
+/**
+ * Valida email
+ */
+function validarEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+/**
+ * Verifica permissão de admin/supervisor
+ */
+function isAdmin(user) {
+  return user.cargo.toLowerCase() === ROLES.ADMIN;
+}
+
+function isSupervisor(user) {
+  return [ROLES.ADMIN, ROLES.SUPERVISOR].includes(user.cargo.toLowerCase());
+}
+
+/**
+ * Invalida caches estrategicamente
+ */
+function invalidarCacheGlobal() {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.removeAll(['product_list', 'unique_teams', 'commission_rules']);
+  } catch (e) {
+    console.error("Erro ao invalidar cache global: " + e.message);
+  }
+}
+
+function invalidarCacheUsuario(email) {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.removeAll([`user_details_${email}`, `tab1_data_${email}`, `team_data_${email}_all`]);
+  } catch (e) {
+    console.error("Erro ao invalidar cache do usuário: " + e.message);
+  }
+}
+
 // --- UTILITÁRIOS E SEGURANÇA ---
 
 // NOVO: Wrapper de Cache para reduzir leituras da planilha
-function getCachedData(key, callback, expiration = 900) { // 15 minutos por padrão
+function getCachedDataLegacy(key, callback, expiration = 900) { // 15 minutos por padrão
   const cache = CacheService.getScriptCache();
   const cachedValue = cache.get(key);
   if (cachedValue) {
@@ -37,7 +138,7 @@ function getCachedData(key, callback, expiration = 900) { // 15 minutos por padr
   return freshData;
 }
 
-function registrarLog(acao, detalhes) {
+function registrarLogLegacy(acao, detalhes) {
   try {
     const ss = getSpreadsheet();
     let ws = ss.getSheetByName(SHEETS.LOGS);

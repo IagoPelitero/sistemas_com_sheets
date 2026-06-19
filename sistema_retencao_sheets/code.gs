@@ -1,4 +1,124 @@
-// --- 1. RENDERIZAÇÃO E SISTEMA --- new
+// ============================================================================
+// CONSTANTES E CONFIGURAÇÕES GLOBAIS
+// ============================================================================
+const ROLES = {
+  ADMIN: 'ADM',
+  SUPERVISOR: 'Supervisor',
+  ATTENDANT: 'Atendente'
+};
+
+const CACHE_DURATION = {
+  SHORT: 600,      // 10 minutos
+  MEDIUM: 1800,    // 30 minutos
+  LONG: 3600       // 1 hora
+};
+
+const LOCK_TIMEOUT = {
+  SHORT: 5000,     // 5 segundos
+  MEDIUM: 10000,   // 10 segundos
+  LONG: 30000      // 30 segundos
+};
+
+// ============================================================================
+// UTILITÁRIOS - CACHE, LOGGING E VALIDAÇÃO
+// ============================================================================
+
+/**
+ * Wrapper para cache com callback - reutilizável em todas as funções
+ */
+function getCachedData(cacheKey, callback, expiration = CACHE_DURATION.MEDIUM) {
+  const cache = CacheService.getScriptCache();
+  const cachedValue = cache.get(cacheKey);
+  
+  if (cachedValue) {
+    return JSON.parse(cachedValue);
+  }
+  
+  const freshData = callback();
+  
+  if (freshData && !freshData.error) {
+    cache.put(cacheKey, JSON.stringify(freshData), expiration);
+  }
+  
+  return freshData;
+}
+
+/**
+ * Registra ações no sheet de logs para auditoria
+ */
+function registrarLog(acao, detalhes) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let logsSheet = ss.getSheetByName('Logs');
+    
+    if (!logsSheet) {
+      logsSheet = ss.insertSheet('Logs');
+      logsSheet.appendRow(['DATA/HORA', 'EMAIL', 'AÇÃO', 'DETALHES']);
+    }
+    
+    const agora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy HH:mm:ss");
+    const email = Session.getActiveUser().getEmail();
+    
+    logsSheet.appendRow([agora, email, acao, detalhes]);
+  } catch (e) {
+    console.error("Falha ao registrar log: " + e.message);
+  }
+}
+
+/**
+ * Valida formato de email
+ */
+function validarEmail(email) {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+}
+
+/**
+ * Valida dados de cadastro de usuário
+ */
+function validarCadastro(dados) {
+  if (!dados.email || !validarEmail(dados.email)) {
+    return "Email inválido";
+  }
+  if (!dados.nome || dados.nome.trim().length < 2) {
+    return "Nome deve ter pelo menos 2 caracteres";
+  }
+  if (!dados.sobrenome || dados.sobrenome.trim().length < 2) {
+    return "Sobrenome deve ter pelo menos 2 caracteres";
+  }
+  if (!Object.values(ROLES).includes(dados.cargo)) {
+    return `Cargo inválido. Deve ser um de: ${Object.values(ROLES).join(', ')}`;
+  }
+  return null; // Válido
+}
+
+/**
+ * Verifica se usuário tem permissão de admin ou supervisor
+ */
+function isAdmin(user) {
+  return user.cargo === ROLES.ADMIN;
+}
+
+function isSupervisor(user) {
+  return [ROLES.ADMIN, ROLES.SUPERVISOR].includes(user.cargo);
+}
+
+/**
+ * Invalida caches relacionados a usuários
+ */
+function invalidarCacheUsuarios() {
+  try {
+    const cache = CacheService.getScriptCache();
+    cache.removeAll(['supervisores_list', 'dashboard_data', 'supervisor_data', 'ranking_data']);
+  } catch (e) {
+    console.error("Erro ao invalidar cache: " + e.message);
+  }
+}
+
+// ============================================================================
+// 1. RENDERIZAÇÃO E SISTEMA
+// ============================================================================
+
 function doGet() {
   return HtmlService.createTemplateFromFile('Index')
     .evaluate().setTitle('Retenção')
@@ -8,42 +128,57 @@ function doGet() {
 
 function getUserInfo() {
   const email = Session.getActiveUser().getEmail();
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Usuarios');
+  const cacheKey = `user_info_${email}`;
   
-  if (!sheet) return { error: "Aba 'Usuarios' não encontrada.", email: email };
+  return getCachedData(cacheKey, () => {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Usuarios');
+    
+    if (!sheet) return { error: "Aba 'Usuarios' não encontrada.", email: email };
 
-  const data = sheet.getDataRange().getValues();
-  
-  // Pula cabeçalho (i=1)
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] == email) {
-      return {
-        email: email, 
-        nome: data[i][1], 
-        sobrenome: data[i][2],
-        cargo: data[i][3], 
-        supervisor: data[i][4]
-      };
+    const data = sheet.getDataRange().getValues();
+    
+    // Pula cabeçalho (i=1)
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] == email) {
+        return {
+          email: email, 
+          nome: data[i][1], 
+          sobrenome: data[i][2],
+          cargo: data[i][3], 
+          supervisor: data[i][4]
+        };
+      }
     }
-  }
-  return { error: "Usuário não encontrado.", email: email };
+    return { error: "Usuário não encontrado.", email: email };
+  }, CACHE_DURATION.LONG);
 }
 
 // --- 2. CADASTRO E GOVERNANÇA ---
 
 function getSupervisoresList() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Usuarios');
-  const data = sheet.getDataRange().getValues();
-  // Filtra quem é supervisor ou ADM
-  return data.slice(1)
-    .filter(r => r[3] === 'Supervisor' || r[3] === 'ADM')
-    .map(r => r[1] + ' ' + r[2]); // Retorna Nome + Sobrenome
+  return getCachedData('supervisores_list', () => {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Usuarios');
+    if (!sheet) return [];
+    
+    const data = sheet.getDataRange().getValues();
+    // Filtra quem é supervisor ou ADM
+    return data.slice(1)
+      .filter(r => r[3] === ROLES.SUPERVISOR || r[3] === ROLES.ADMIN)
+      .map(r => r[1] + ' ' + r[2]); // Retorna Nome + Sobrenome
+  }, CACHE_DURATION.LONG);
 }
 
 function cadastrarUsuario(dados) {
+  // Validação de entrada
+  const erroValidacao = validarCadastro(dados);
+  if (erroValidacao) {
+    registrarLog('CADASTRO_ERRO', `Email: ${dados.email} - ${erroValidacao}`);
+    return { error: erroValidacao };
+  }
+
   const lock = LockService.getScriptLock();
   try {
-    lock.waitLock(10000); // Fila de espera de até 10 segundos
+    lock.waitLock(LOCK_TIMEOUT.MEDIUM);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Usuarios');
     const data = sheet.getDataRange().getValues();
@@ -53,20 +188,25 @@ function cadastrarUsuario(dados) {
     // Procura se o e-mail já está cadastrado
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] === dados.email) {
-        linhaDoUsuario = i + 1; // +1 porque a planilha começa no índice 1
+        linhaDoUsuario = i + 1;
         break;
       }
     }
 
     if (linhaDoUsuario !== -1) {
-      // MELHORIA: Atualiza usuário existente (Colunas B até E)
+      // Atualiza usuário existente
       sheet.getRange(linhaDoUsuario, 2, 1, 4).setValues([[
         dados.nome,
         dados.sobrenome,
         dados.cargo,
         dados.supervisor
       ]]);
-      return "Usuário atualizado com sucesso!";
+      
+      SpreadsheetApp.flush();
+      invalidarCacheUsuarios();
+      registrarLog('CADASTRO_ATUALIZAR', `Email: ${dados.email} | Cargo: ${dados.cargo}`);
+      
+      return { success: true, message: "Usuário atualizado com sucesso!" };
     } else {
       // Cria novo usuário
       sheet.appendRow([
@@ -76,88 +216,111 @@ function cadastrarUsuario(dados) {
         dados.cargo,
         dados.supervisor 
       ]);
-      return "Usuário cadastrado com sucesso!";
+      
+      SpreadsheetApp.flush();
+      invalidarCacheUsuarios();
+      registrarLog('CADASTRO_NOVO', `Email: ${dados.email} | Nome: ${dados.nome} | Cargo: ${dados.cargo}`);
+      
+      return { success: true, message: "Usuário cadastrado com sucesso!" };
     }
   } catch (e) {
-    return "Erro no cadastro: " + e.message;
+    registrarLog('CADASTRO_ERRO_SISTEMA', `Email: ${dados.email} - ${e.message}`);
+    return { error: "Erro no cadastro: " + e.message };
   } finally {
     lock.releaseLock();
   }
 }
 
 function excluirUsuario(email) {
-   const lock = LockService.getScriptLock();
-   try {
-     lock.waitLock(10000);
-     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Usuarios');
-     const data = sheet.getDataRange().getValues();
-     for(let i=0; i<data.length; i++){
-       if(data[i][0] == email) {
-         sheet.deleteRow(i+1);
-         return "Usuário excluído.";
-       }
-     }
-     return "Erro ao excluir.";
-   } catch (e) {
-     return "Erro: " + e.message;
-   } finally {
-     lock.releaseLock();
-   }
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(LOCK_TIMEOUT.MEDIUM);
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Usuarios');
+    const data = sheet.getDataRange().getValues();
+    
+    for(let i = 1; i < data.length; i++){
+      if(data[i][0] == email) {
+        sheet.deleteRow(i+1);
+        
+        SpreadsheetApp.flush();
+        invalidarCacheUsuarios();
+        registrarLog('USUARIO_EXCLUIDO', `Email: ${email}`);
+        
+        return { success: true, message: "Usuário excluído com sucesso." };
+      }
+    }
+    
+    registrarLog('USUARIO_EXCLUIR_ERRO', `Email: ${email} - Não encontrado`);
+    return { error: "Usuário não encontrado." };
+  } catch (e) {
+    registrarLog('USUARIO_EXCLUIR_ERRO_SISTEMA', `Email: ${email} - ${e.message}`);
+    return { error: "Erro ao excluir: " + e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function arquivarMes(idPlanilhaDestino) {
   const lock = LockService.getScriptLock();
   try {
-    lock.waitLock(30000); // Processo mais pesado, espera até 30s
+    lock.waitLock(LOCK_TIMEOUT.LONG);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sourceSheet = ss.getSheetByName('Dados');
     const data = sourceSheet.getDataRange().getValues();
 
-    if (data.length <= 1) return "Não há dados para arquivar.";
+    if (data.length <= 1) {
+      registrarLog('ARQUIVAMENTO_ERRO', 'Nenhum dado para arquivar');
+      return { error: "Não há dados para arquivar." };
+    }
 
     const destSS = SpreadsheetApp.openById(idPlanilhaDestino);
     let destSheet = destSS.getSheetByName('Historico');
     if (!destSheet) destSheet = destSS.insertSheet('Historico');
 
-    const rows = data.slice(1); // Pega dados sem cabeçalho
+    const rows = data.slice(1);
     const lastRow = destSheet.getLastRow();
     
-    // Cola no destino
     if (lastRow === 0) {
       destSheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
     } else {
       destSheet.getRange(lastRow + 1, 1, rows.length, rows[0].length).setValues(rows);
     }
 
-    SpreadsheetApp.flush(); 
+    SpreadsheetApp.flush();
     sourceSheet.deleteRows(2, rows.length);
     
-    return "Sucesso! Dados movidos para o arquivo.";
+    invalidarCacheUsuarios();
+    registrarLog('ARQUIVAMENTO_SUCESSO', `${rows.length} registros movidos para ${idPlanilhaDestino}`);
+    
+    return { success: true, message: "Sucesso! Dados movidos para o arquivo." };
   } catch (e) {
-    return "Erro no arquivamento: " + e.message;
+    registrarLog('ARQUIVAMENTO_ERRO_SISTEMA', `ID: ${idPlanilhaDestino} - ${e.message}`);
+    return { error: "Erro no arquivamento: " + e.message };
   } finally {
     lock.releaseLock();
   }
 }
 
 // --- 3. REGISTRO DE DADOS ---
+
 function salvarRetencao(form) {
-const lock = LockService.getScriptLock();
+  const lock = LockService.getScriptLock();
   try {
-    // Aumentamos a tolerância da fila para 30 segundos (30000 ms)
-    lock.waitLock(30000);
+    lock.waitLock(LOCK_TIMEOUT.LONG);
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName('Dados');
     const user = getUserInfo();
+    
+    if (user.error) {
+      registrarLog('RETENCAO_ERRO', 'Usuário não encontrado');
+      return { error: user.error };
+    }
 
     // Usa a data enviada pelo formulário, corrigindo problemas de fuso horário
-    const dateParts = form.dataAtendimento.split('-'); // YYYY-MM-DD
-    // Define o horário para 12:00 (meio-dia) para evitar que o fuso horário retroceda a data para o dia anterior
+    const dateParts = form.dataAtendimento.split('-');
     const dataCorreta = new Date(dateParts[0], dateParts[1] - 1, dateParts[2], 12, 0, 0);
-    // Formata explicitamente para o padrão brasileiro (DD/MM/YYYY)
     const dataFormatada = Utilities.formatDate(dataCorreta, Session.getScriptTimeZone(), "dd/MM/yyyy");
 
-    // Estrutura: [Data, Email, Nome, Supervisor, Tipo, Sub, Res, Status]
     sheet.appendRow([
       dataFormatada,
       user.email, 
@@ -169,14 +332,15 @@ const lock = LockService.getScriptLock();
       'Ativo'
     ]);
 
-    // MÁGICA PARA CONCORRÊNCIA: Força a gravação imediata antes de soltar o cadeado
     SpreadsheetApp.flush();
+    invalidarCacheUsuarios();
+    registrarLog('RETENCAO_SALVA', `${form.tipo} - ${form.resultado} | ${user.email}`);
     
-    return "Registro salvo com sucesso!";
+    return { success: true, message: "Registro salvo com sucesso!" };
   } catch (e) {
-    return "Erro ao salvar: " + e.message;
+    registrarLog('RETENCAO_ERRO_SISTEMA', `${form.tipo} - ${e.message}`);
+    return { error: "Erro ao salvar: " + e.message };
   } finally {
-    // Libera a planilha para o próximo da fila
     lock.releaseLock();
   }
 }
@@ -184,7 +348,9 @@ const lock = LockService.getScriptLock();
 function getUltimosRegistros() {
   try {
     const user = getUserInfo();
-    if (!user || !user.email) return []; 
+    if (!user || user.error) {
+      return { error: "Usuário não encontrado" };
+    }
 
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Dados');
     const data = sheet.getDataRange().getValues();
@@ -203,7 +369,7 @@ function getUltimosRegistros() {
           linha: i + 1, 
           data: dataFormatada,
           produto: String(data[i][4] || ''),
-          subProduto: String(data[i][5] || ''), // <-- NOVO: Pegando o detalhe do Massificado (Índice 5)
+          subProduto: String(data[i][5] || ''),
           resultado: String(data[i][6] || '')
         });
         
@@ -211,30 +377,35 @@ function getUltimosRegistros() {
       }
     }
     
-    return ultimos;
-
+    return { success: true, data: ultimos };
   } catch (e) {
-    throw new Error("Falha ao buscar registros: " + e.message);
+    registrarLog('ULTIMOS_REGISTROS_ERRO', e.message);
+    return { error: "Falha ao buscar registros: " + e.message };
   }
 }
 
 function excluirRegistro(linha) {
   const lock = LockService.getScriptLock();
   try {
-    lock.waitLock(10000);
+    lock.waitLock(LOCK_TIMEOUT.MEDIUM);
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Dados');
     const user = getUserInfo();
     
     // Trava de segurança: garante que a pessoa só exclua o próprio registro
     const emailDaLinha = sheet.getRange(linha, 2).getValue();
-    if(emailDaLinha !== user.email && user.cargo !== 'ADM') {
-      return "Erro: Você só pode excluir os seus próprios registros.";
+    if(emailDaLinha !== user.email && !isAdmin(user)) {
+      registrarLog('REGISTRO_EXCLUSAO_NEGADA', `Linha: ${linha} - Email: ${emailDaLinha} - Tentativa de: ${user.email}`);
+      return { error: "Erro: Você só pode excluir os seus próprios registros." };
     }
     
     sheet.deleteRow(linha);
-    return "Registro excluído com sucesso!";
+    invalidarCacheUsuarios();
+    registrarLog('REGISTRO_EXCLUIDO', `Linha: ${linha} | Por: ${user.email}`);
+    
+    return { success: true, message: "Registro excluído com sucesso!" };
   } catch(e) {
-    return "Erro ao excluir: " + e.message;
+    registrarLog('REGISTRO_EXCLUSAO_ERRO_SISTEMA', `Linha: ${linha} - ${e.message}`);
+    return { error: "Erro ao excluir: " + e.message };
   } finally {
     lock.releaseLock();
   }
@@ -243,32 +414,36 @@ function excluirRegistro(linha) {
 // --- 4. DASHBOARD E RELATÓRIOS ---
 
 function getDashboardData() {
-  const user = getUserInfo();
-  if(user.error) return null;
+  return getCachedData('dashboard_data', () => {
+    const user = getUserInfo();
+    if(user.error) {
+      registrarLog('DASHBOARD_ERRO', 'Usuário não encontrado');
+      return { error: user.error };
+    }
 
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Dados');
-  const data = sheet.getDataRange().getValues();
-  const rows = data.slice(1);
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Dados');
+    const data = sheet.getDataRange().getValues();
+    const rows = data.slice(1);
 
-  // 1. Dados Pessoais
-  const meusDados = rows.filter(row => row[1] === user.email);
-  const statsPessoal = processarEstatisticas(meusDados);
-  const comissaoPessoal = calcularComissoes(statsPessoal);
+    // 1. Dados Pessoais
+    const meusDados = rows.filter(row => row[1] === user.email);
+    const statsPessoal = processarEstatisticas(meusDados);
+    const comissaoPessoal = calcularComissoes(statsPessoal);
 
-  // 2. Dados da Equipe (Se tiver supervisor)
-  let statsEquipe = null;
-  let comissaoEquipe = null;
-  if (user.supervisor && user.supervisor !== '-') {
-     // Filtra todos os registros onde a coluna Supervisor (índice 3) bate com o sup do usuário
-     const dadosEquipe = rows.filter(row => row[3] === user.supervisor);
-     statsEquipe = processarEstatisticas(dadosEquipe);
-     comissaoEquipe = calcularComissoes(statsEquipe);
-  }
+    // 2. Dados da Equipe (Se tiver supervisor)
+    let statsEquipe = null;
+    let comissaoEquipe = null;
+    if (user.supervisor && user.supervisor !== '-') {
+       const dadosEquipe = rows.filter(row => row[3] === user.supervisor);
+       statsEquipe = processarEstatisticas(dadosEquipe);
+       comissaoEquipe = calcularComissoes(statsEquipe);
+    }
 
-  return {
-    pessoal: { stats: statsPessoal, comissao: comissaoPessoal },
-    equipe: statsEquipe ? { stats: statsEquipe, comissao: comissaoEquipe } : null
-  };
+    return {
+      pessoal: { stats: statsPessoal, comissao: comissaoPessoal },
+      equipe: statsEquipe ? { stats: statsEquipe, comissao: comissaoEquipe } : null
+    };
+  }, CACHE_DURATION.MEDIUM);
 }
 
 function processarEstatisticas(rows) {
@@ -433,175 +608,201 @@ function calcularComissoes(stats) {
 }
 
 function getSupervisorData(filtroEmail) {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const wsUsers = ss.getSheetByName("Usuarios");
-    const emailLogado = Session.getActiveUser().getEmail();
+  return getCachedData(`supervisor_data_${filtroEmail || 'geral'}`, () => {
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const wsUsers = ss.getSheetByName("Usuarios");
+      const emailLogado = Session.getActiveUser().getEmail();
 
-    const usersData = wsUsers.getRange(2, 1, wsUsers.getLastRow() - 1, 5).getValues();
-    const userLogado = usersData.find(u => u[0] === emailLogado);
+      const usersData = wsUsers.getRange(2, 1, wsUsers.getLastRow() - 1, 5).getValues();
+      const userLogado = usersData.find(u => u[0] === emailLogado);
 
-    if (!userLogado) return null;
+      if (!userLogado) {
+        registrarLog('SUPERVISOR_DATA_ERRO', 'Usuário não encontrado');
+        return { error: "Usuário não encontrado" };
+      }
 
-    const nomeSupervisor = userLogado[1] + ' ' + userLogado[2];
-    let equipeEmails = [];
-    let listaMembros = [];
+      const nomeSupervisor = userLogado[1] + ' ' + userLogado[2];
+      let equipeEmails = [];
+      let listaMembros = [];
 
-    if (userLogado[3] === 'ADM') {
-        equipeEmails = usersData.map(u => u[0]);
-        listaMembros = usersData.map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
-    } else if (userLogado[3] === 'Supervisor') {
-        const equipe = usersData.filter(u => u[4] === nomeSupervisor);
-        equipeEmails = equipe.map(u => u[0]);
-        listaMembros = equipe.map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
-        if (!equipeEmails.includes(emailLogado)) equipeEmails.push(emailLogado);
-    } else {
-        return null;
+      if (userLogado[3] === ROLES.ADMIN) {
+          equipeEmails = usersData.map(u => u[0]);
+          listaMembros = usersData.map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
+      } else if (userLogado[3] === ROLES.SUPERVISOR) {
+          const equipe = usersData.filter(u => u[4] === nomeSupervisor);
+          equipeEmails = equipe.map(u => u[0]);
+          listaMembros = equipe.map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
+          if (!equipeEmails.includes(emailLogado)) equipeEmails.push(emailLogado);
+      } else {
+          registrarLog('SUPERVISOR_DATA_ACESSO_NEGADO', `Email: ${emailLogado} - Cargo: ${userLogado[3]}`);
+          return { error: "Acesso negado" };
+      }
+
+      const wsDados = ss.getSheetByName("Dados");
+      const todosOsDados = wsDados.getDataRange().getValues();
+      todosOsDados.shift();
+
+      const dadosFiltrados = todosOsDados.filter(row => {
+          const emailAtendente = row[1];
+          if (!equipeEmails.includes(emailAtendente)) return false;
+          if (filtroEmail && emailAtendente !== filtroEmail) return false;
+          return true;
+      });
+
+      const statsGeral = processarEstatisticas(dadosFiltrados);
+
+      return { geral: statsGeral, equipe: listaMembros };
+    } catch (e) {
+      registrarLog('SUPERVISOR_DATA_ERRO_SISTEMA', e.message);
+      return { error: e.message };
     }
-
-    const wsDados = ss.getSheetByName("Dados");
-    const todosOsDados = wsDados.getDataRange().getValues();
-    todosOsDados.shift(); // Remove cabeçalho
-
-    // Filtra os dados relevantes para a equipe/usuário antes de processar
-    const dadosFiltrados = todosOsDados.filter(row => {
-        const emailAtendente = row[1];
-        if (!equipeEmails.includes(emailAtendente)) return false;
-        if (filtroEmail && emailAtendente !== filtroEmail) return false;
-        return true;
-    });
-
-    // Reutiliza a função de processamento para manter a consistência
-    const statsGeral = processarEstatisticas(dadosFiltrados);
-
-    // O objeto 'diario' foi removido daqui. O frontend agora usará a 'statsGeral.lista'
-    // para gerar os dados diários, evitando duplicação de lógica.
-    return { geral: statsGeral, equipe: listaMembros };
+  }, CACHE_DURATION.MEDIUM);
 }
 
 function getRankingData(periodo) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const wsUsers = ss.getSheetByName("Usuarios");
-  const emailLogado = Session.getActiveUser().getEmail();
+  return getCachedData(`ranking_data_${periodo}`, () => {
+    try {
+      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const wsUsers = ss.getSheetByName("Usuarios");
+      const emailLogado = Session.getActiveUser().getEmail();
 
-  const usersData = wsUsers.getRange(2, 1, wsUsers.getLastRow() - 1, 5).getValues();
-  const userLogado = usersData.find(u => u[0] === emailLogado);
+      const usersData = wsUsers.getRange(2, 1, wsUsers.getLastRow() - 1, 5).getValues();
+      const userLogado = usersData.find(u => u[0] === emailLogado);
 
-  if (!userLogado || (userLogado[3] !== 'Supervisor' && userLogado[3] !== 'ADM')) {
-    return []; // Retorna vazio se não for supervisor ou ADM
-  }
+      if (!userLogado || !isSupervisor(userLogado)) {
+        registrarLog('RANKING_ACESSO_NEGADO', `Email: ${emailLogado}`);
+        return [];
+      }
 
-  const nomeSupervisor = userLogado[1] + ' ' + userLogado[2];
-  let listaMembros = [];
+      const nomeSupervisor = userLogado[1] + ' ' + userLogado[2];
+      let listaMembros = [];
 
-  if (userLogado[3] === 'ADM') {
-      listaMembros = usersData.map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
-  } else { // Supervisor
-      listaMembros = usersData
-        .filter(u => u[4] === nomeSupervisor)
-        .map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
-  }
+      if (userLogado[3] === ROLES.ADMIN) {
+          listaMembros = usersData.map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
+      } else {
+          listaMembros = usersData
+            .filter(u => u[4] === nomeSupervisor)
+            .map(u => ({ email: u[0], nome: u[1] + ' ' + u[2] }));
+      }
 
-  const wsDados = ss.getSheetByName("Dados");
-  const todosOsDados = wsDados.getDataRange().getValues();
-  todosOsDados.shift(); // Remove cabeçalho
+      const wsDados = ss.getSheetByName("Dados");
+      const todosOsDados = wsDados.getDataRange().getValues();
+      todosOsDados.shift();
 
-  let dadosFiltrados = todosOsDados;
-  const hoje = new Date();
+      let dadosFiltrados = todosOsDados;
+      const hoje = new Date();
 
-  // Função auxiliar de segurança caso a planilha traga a data no formato texto 'DD/MM/YYYY'
-  const parseDateSegura = (d) => {
-    if (d instanceof Date) return d;
-    if (typeof d === 'string' && d.includes('/')) {
-      const p = d.split('/');
-      return new Date(p[2], p[1] - 1, p[0]);
-    }
-    return new Date(d);
-  };
+      const parseDateSegura = (d) => {
+        if (d instanceof Date) return d;
+        if (typeof d === 'string' && d.includes('/')) {
+          const p = d.split('/');
+          return new Date(p[2], p[1] - 1, p[0]);
+        }
+        return new Date(d);
+      };
 
-  if (periodo === 'mensal') {
-    const inicioDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-    dadosFiltrados = todosOsDados.filter(row => parseDateSegura(row[0]) >= inicioDoMes);
-  } else if (periodo === 'semanal') {
-    const seteDiasAtras = new Date();
-    seteDiasAtras.setHours(0, 0, 0, 0);
-    seteDiasAtras.setDate(hoje.getDate() - 7);
-    dadosFiltrados = todosOsDados.filter(row => parseDateSegura(row[0]) >= seteDiasAtras);
-  }
+      if (periodo === 'mensal') {
+        const inicioDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+        dadosFiltrados = todosOsDados.filter(row => parseDateSegura(row[0]) >= inicioDoMes);
+      } else if (periodo === 'semanal') {
+        const seteDiasAtras = new Date();
+        seteDiasAtras.setHours(0, 0, 0, 0);
+        seteDiasAtras.setDate(hoje.getDate() - 7);
+        dadosFiltrados = todosOsDados.filter(row => parseDateSegura(row[0]) >= seteDiasAtras);
+      }
 
-  const ranking = [];
-  const calcPct = (num, den) => (den && den > 0) ? (num / den) * 100 : 0;
+      const ranking = [];
+      const calcPct = (num, den) => (den && den > 0) ? (num / den) * 100 : 0;
 
-  listaMembros.forEach(membro => {
-    // Usa os dados já filtrados por período
-    const dadosDoMembro = dadosFiltrados.filter(row => row[1] === membro.email);
-    
-    if (dadosDoMembro.length > 0) {
-      const stats = processarEstatisticas(dadosDoMembro);
-      const comissao = calcularComissoes(stats);
-      const pctRetCC = calcPct(stats.cartao.retidoTotal, stats.cartao.retidoTotal + stats.cartao.cancelado);
-      const pctRetCD = calcPct(stats.conta.retido, stats.conta.retido + stats.conta.cancelado);
+      listaMembros.forEach(membro => {
+        const dadosDoMembro = dadosFiltrados.filter(row => row[1] === membro.email);
+        
+        if (dadosDoMembro.length > 0) {
+          const stats = processarEstatisticas(dadosDoMembro);
+          const comissao = calcularComissoes(stats);
+          const pctRetCC = calcPct(stats.cartao.retidoTotal, stats.cartao.retidoTotal + stats.cartao.cancelado);
+          const pctRetCD = calcPct(stats.conta.retido, stats.conta.retido + stats.conta.cancelado);
 
-      ranking.push({ 
-        email: membro.email, // Adicionado para destacar o usuário logado
-        nome: membro.nome, 
-        pctRetCC: pctRetCC, 
-        pctRetCD: pctRetCD, 
-        comissaoTotal: comissao.total 
+          ranking.push({ 
+            email: membro.email,
+            nome: membro.nome, 
+            pctRetCC: pctRetCC, 
+            pctRetCD: pctRetCD, 
+            comissaoTotal: comissao.total 
+          });
+        }
       });
+
+      ranking.sort((a, b) => b.comissaoTotal - a.comissaoTotal);
+
+      return ranking;
+    } catch (e) {
+      registrarLog('RANKING_ERRO_SISTEMA', e.message);
+      return [];
     }
-  });
-
-  ranking.sort((a, b) => b.comissaoTotal - a.comissaoTotal);
-
-  return ranking;
+  }, CACHE_DURATION.MEDIUM);
 }
 // --- 5. EXPORTAÇÃO DE RELATÓRIO (CSV) ---
+
 function gerarRelatorioCSV(inicio, fim, tipoRelatorio) {
-  const user = getUserInfo(); 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName('Dados'); 
-  
-  if(!sheet) return "Erro: Aba de Dados não encontrada.";
-
-  const data = sheet.getDataRange().getValues();
-  
-  const dInicio = new Date(inicio); dInicio.setHours(0,0,0,0);
-  const dFim = new Date(fim); dFim.setHours(23,59,59,999);
-
-  let csvContent = "Data,Email,Nome,Supervisor,Produto,SubProduto,Resultado\n";
-
-  // Função auxiliar de segurança para não corromper o relatório
-  const parseDateSegura = (d) => {
-    if (d instanceof Date) return d;
-    if (typeof d === 'string' && d.includes('/')) {
-      const p = d.split('/');
-      return new Date(p[2], p[1] - 1, p[0]);
+  try {
+    const user = getUserInfo(); 
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Dados'); 
+    
+    if(!sheet) {
+      registrarLog('RELATORIO_ERRO', 'Aba de Dados não encontrada');
+      return { error: "Erro: Aba de Dados não encontrada." };
     }
-    return new Date(d);
-  };
 
-  const filtrados = data.slice(1).filter(row => {
-    const dataRow = parseDateSegura(row[0]); 
-    if (dataRow < dInicio || dataRow > dFim) return false;
+    const data = sheet.getDataRange().getValues();
+    
+    const dInicio = new Date(inicio); 
+    dInicio.setHours(0,0,0,0);
+    const dFim = new Date(fim); 
+    dFim.setHours(23,59,59,999);
 
-    if (tipoRelatorio === 'Pessoal') {
-       return row[1] === user.email;
-    } 
-    else if (tipoRelatorio === 'Equipe') {
-       if (user.cargo === 'ADM') return true;
-       const nomeCompleto = user.nome + ' ' + user.sobrenome;
-       return row[3] === nomeCompleto || row[1] === user.email;
+    let csvContent = "Data,Email,Nome,Supervisor,Produto,SubProduto,Resultado\n";
+
+    const parseDateSegura = (d) => {
+      if (d instanceof Date) return d;
+      if (typeof d === 'string' && d.includes('/')) {
+        const p = d.split('/');
+        return new Date(p[2], p[1] - 1, p[0]);
+      }
+      return new Date(d);
+    };
+
+    const filtrados = data.slice(1).filter(row => {
+      const dataRow = parseDateSegura(row[0]); 
+      if (dataRow < dInicio || dataRow > dFim) return false;
+
+      if (tipoRelatorio === 'Pessoal') {
+         return row[1] === user.email;
+      } 
+      else if (tipoRelatorio === 'Equipe') {
+         if (isAdmin(user)) return true;
+         const nomeCompleto = user.nome + ' ' + user.sobrenome;
+         return row[3] === nomeCompleto || row[1] === user.email;
+      }
+      return false;
+    });
+
+    if (filtrados.length === 0) {
+      registrarLog('RELATORIO_VAZIO', `Tipo: ${tipoRelatorio} | Período: ${inicio} a ${fim}`);
+      return { error: "Vazio" };
     }
-    return false;
-  });
 
-  if (filtrados.length === 0) return "Vazio";
+    filtrados.forEach(row => {
+      csvContent += `"${row[0]}","${row[1]}","${row[2]}","${row[3]}","${row[4]}","${row[5]}","${row[6]}"\n`;
+    });
 
-  filtrados.forEach(row => {
-    let dataFormatada = Utilities.formatDate(parseDateSegura(row[0]), Session.getScriptTimeZone(), "dd/MM/yyyy");
-    let linha = `"${dataFormatada}","${row[1]}","${row[2]}","${row[3]}","${row[4]}","${row[5]}","${row[6]}"`;
-    csvContent += linha + "\n";
-  });
-
-  return csvContent;
+    registrarLog('RELATORIO_EXPORTADO', `Tipo: ${tipoRelatorio} | ${filtrados.length} linhas | ${user.email}`);
+    
+    return { success: true, content: csvContent, filename: `Relatorio_${tipoRelatorio}_${inicio}.csv` };
+  } catch (e) {
+    registrarLog('RELATORIO_ERRO_SISTEMA', e.message);
+    return { error: "Erro ao gerar relatório: " + e.message };
+  }
 }

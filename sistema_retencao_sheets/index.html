@@ -339,6 +339,57 @@
             background-color: var(--card-bg);
             z-index: 5;
         }
+
+        /* Animações do Toast */
+        @keyframes slideInRight {
+            from {
+                transform: translateX(120%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(120%);
+                opacity: 0;
+            }
+        }
+
+        .toast-animated-enter {
+            animation: slideInRight 0.4s ease-in-out forwards;
+        }
+
+        .toast-animated-exit {
+            animation: slideOutRight 0.3s ease-in-out forwards;
+        }
+
+        /* Loader */
+        #loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+
+        .spinner-border-sm {
+            width: 20px;
+            height: 20px;
+            border-width: 2px;
+        }
     </style>
 </head>
 
@@ -786,7 +837,7 @@
                     </table>
                 </div>
             </div>
-        </section>
+        </div>
 
         <section id="tab5" class="tab-section hidden">
             <header class="d-flex justify-content-between align-items-center mb-4">
@@ -1057,6 +1108,10 @@
             // Se abriu a aba 2, carrega a lixeira
             if (id === 'tab2') {
                 carregarUltimosRegistros();
+            }
+            // Se abriu a aba 3, carrega os dados da equipe
+            if (id === 'tab3') {
+                updateSupervisorStats();
             }
             if (id === 'tab5') {
                 loadRankingData();
@@ -1348,7 +1403,10 @@
         }
 
         function renderSupervisorDashboard(data) {
-            if (!data) return;
+            if (!data || !data.geral || !data.geral.cartao) {
+                console.error('Dados incompletos:', data);
+                return;
+            }
             const stats = data.geral;
 
             const sel = document.getElementById('supFilterAgent');
