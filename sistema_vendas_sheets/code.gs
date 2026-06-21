@@ -124,32 +124,6 @@ function invalidarCacheUsuario(email) {
 
 // --- UTILITÁRIOS E SEGURANÇA ---
 
-// NOVO: Wrapper de Cache para reduzir leituras da planilha
-function getCachedDataLegacy(key, callback, expiration = 900) { // 15 minutos por padrão
-  const cache = CacheService.getScriptCache();
-  const cachedValue = cache.get(key);
-  if (cachedValue) {
-    return JSON.parse(cachedValue);
-  }
-  const freshData = callback();
-  if (freshData && !freshData.error) {
-    cache.put(key, JSON.stringify(freshData), expiration);
-  }
-  return freshData;
-}
-
-function registrarLogLegacy(acao, detalhes) {
-  try {
-    const ss = getSpreadsheet();
-    let ws = ss.getSheetByName(SHEETS.LOGS);
-    if (!ws) { ws = ss.insertSheet(SHEETS.LOGS); ws.appendRow(["DATA/HORA", "USUÁRIO", "AÇÃO", "DETALHES"]); }
-    const agora = Utilities.formatDate(new Date(), "GMT-3", "dd/MM/yyyy HH:mm:ss");
-    ws.appendRow([agora, Session.getActiveUser().getEmail(), acao, detalhes]);
-  } catch(e) {
-    console.error("Falha ao registrar log: " + e.message);
-  }
-}
-
 function getUserDetails() {
   try {
     const userEmail = Session.getActiveUser().getEmail();
@@ -497,7 +471,9 @@ function getAuditLogs() {
     
     // Retorna os últimos 200 logs, em ordem decrescente (mais novos primeiro)
     return data.map(row => ({
-      timestamp: Utilities.formatDate(new Date(row[0]), "GMT-3", "dd/MM/yy HH:mm"),
+      timestamp: row[0] instanceof Date
+        ? Utilities.formatDate(row[0], "GMT-3", "dd/MM/yy HH:mm")
+        : String(row[0]),
       user: row[1],
       action: row[2],
       details: row[3]

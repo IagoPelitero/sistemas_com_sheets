@@ -414,7 +414,8 @@ function excluirRegistro(linha) {
 // --- 4. DASHBOARD E RELATÓRIOS ---
 
 function getDashboardData() {
-  return getCachedData('dashboard_data', () => {
+  const emailAtivo = Session.getActiveUser().getEmail();
+  return getCachedData('dashboard_data_' + emailAtivo, () => {
     const user = getUserInfo();
     if(user.error) {
       registrarLog('DASHBOARD_ERRO', 'Usuário não encontrado');
@@ -670,7 +671,7 @@ function getRankingData(periodo) {
       const usersData = wsUsers.getRange(2, 1, wsUsers.getLastRow() - 1, 5).getValues();
       const userLogado = usersData.find(u => u[0] === emailLogado);
 
-      if (!userLogado || !isSupervisor(userLogado)) {
+      if (!userLogado || ![ROLES.ADMIN, ROLES.SUPERVISOR].includes(userLogado[3])) {
         registrarLog('RANKING_ACESSO_NEGADO', `Email: ${emailLogado}`);
         return [];
       }

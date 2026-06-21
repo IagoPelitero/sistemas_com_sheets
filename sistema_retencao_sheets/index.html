@@ -408,13 +408,13 @@
         <hr style="border-color: rgba(255,255,255,0.2); margin: 10px 0;">
 
         <nav class="nav flex-column">
-            <a class="nav-link hidden" onclick="showTab('tab1')"><i class="bi bi-speedometer2"></i> Status (Meus
+            <a class="nav-link hidden" data-tab="tab1" onclick="showTab('tab1')"><i class="bi bi-speedometer2"></i> Status (Meus
                 Resultados)</a>
-            <a class="nav-link hidden" onclick="showTab('tab2')"><i class="bi bi-pencil-square"></i> Registrar
+            <a class="nav-link hidden" data-tab="tab2" onclick="showTab('tab2')"><i class="bi bi-pencil-square"></i> Registrar
                 Retenção</a>
-            <a class="nav-link hidden" onclick="showTab('tab3')"><i class="bi bi-graph-up-arrow"></i> Gestão Equipe</a>
-            <a class="nav-link hidden" onclick="showTab('tab5')"><i class="bi bi-trophy-fill"></i> Ranking da Equipe</a>
-            <a class="nav-link hidden" onclick="showTab('tab4')"><i class="bi bi-gear-fill"></i> Administração</a>
+            <a class="nav-link hidden" data-tab="tab3" onclick="showTab('tab3')"><i class="bi bi-graph-up-arrow"></i> Gestão Equipe</a>
+            <a class="nav-link hidden" data-tab="tab5" onclick="showTab('tab5')"><i class="bi bi-trophy-fill"></i> Ranking da Equipe</a>
+            <a class="nav-link hidden" data-tab="tab4" onclick="showTab('tab4')"><i class="bi bi-gear-fill"></i> Administração</a>
         </nav>
     </aside>
 
@@ -1084,14 +1084,14 @@
                 allNavs.forEach(l => l.classList.remove('hidden'));
                 startTab = 'tab3';
             } else if (user.cargo === 'Supervisor') {
-                document.querySelector('.nav-link[onclick*="tab3"]').classList.remove('hidden');
-                document.querySelector('.nav-link[onclick*="tab5"]').classList.remove('hidden');
-                document.querySelector('.nav-link[onclick*="tab4"]').classList.remove('hidden');
+                document.querySelector('.nav-link[data-tab="tab3"]').classList.remove('hidden');
+                document.querySelector('.nav-link[data-tab="tab5"]').classList.remove('hidden');
+                document.querySelector('.nav-link[data-tab="tab4"]').classList.remove('hidden');
                 startTab = 'tab3';
             } else {
                 // Atendente
-                document.querySelector('.nav-link[onclick*="tab1"]').classList.remove('hidden');
-                document.querySelector('.nav-link[onclick*="tab2"]').classList.remove('hidden');
+                document.querySelector('.nav-link[data-tab="tab1"]').classList.remove('hidden');
+                document.querySelector('.nav-link[data-tab="tab2"]').classList.remove('hidden');
             }
 
             showTab(startTab);
@@ -1102,7 +1102,7 @@
             document.querySelectorAll('.tab-section').forEach(e => e.classList.add('hidden'));
             document.getElementById(id).classList.remove('hidden');
             document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-            const activeLink = document.querySelector(`.nav-link[onclick*="${id}"]`);
+            const activeLink = document.querySelector(`.nav-link[data-tab="${id}"]`);
             if (activeLink) activeLink.classList.add('active');
 
             // Se abriu a aba 2, carrega a lixeira
@@ -1166,10 +1166,17 @@
             tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted small"><div class="spinner-border spinner-border-sm"></div> Buscando registros...</td></tr>';
 
             google.script.run
-                .withSuccessHandler(registros => {
+                .withSuccessHandler(resp => {
                     tbody.innerHTML = '';
 
-                    if (!registros || registros.length === 0) {
+                    if (!resp || resp.error) {
+                        tbody.innerHTML = `<tr><td colspan="3" class="text-center text-danger small">${resp ? resp.error : 'Erro desconhecido'}</td></tr>`;
+                        return;
+                    }
+
+                    const registros = resp.data || [];
+
+                    if (registros.length === 0) {
                         tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted small">Nenhum registro recente encontrado.</td></tr>';
                         return;
                     }
@@ -1204,9 +1211,9 @@
         function deletarMeuRegistro(linha, btnElement) {
             btnElement.disabled = true;
             btnElement.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-            google.script.run.withSuccessHandler(msg => {
-                if (msg.includes('Erro')) showToast(msg, 'danger');
-                else { showToast(msg, 'success'); carregarUltimosRegistros(); loadAllData(currentUser); }
+            google.script.run.withSuccessHandler(resp => {
+                if (resp.error) showToast(resp.error, 'danger');
+                else { showToast(resp.message, 'success'); carregarUltimosRegistros(); loadAllData(currentUser); }
             }).excluirRegistro(linha);
         }
 
@@ -1590,9 +1597,15 @@
             btn.innerText = 'Salvando...';
 
             google.script.run
-                .withSuccessHandler(msg => {
+                .withSuccessHandler(resp => {
                     // 1. Mostra o alerta de sucesso
-                    showToast(msg, 'success');
+                    if (resp.error) {
+                        showToast(resp.error, 'danger');
+                        btn.disabled = false;
+                        btn.innerText = 'Salvar Registro';
+                        return;
+                    }
+                    showToast(resp.message, 'success');
 
                     // 2. Limpa o formulário e destrava o botão
                     form.reset();
@@ -1631,12 +1644,15 @@
             const fim = document.getElementById('relFim').value;
             if (!ini || !fim) return showToast("Selecione as datas.", 'danger');
 
-            google.script.run.withSuccessHandler(csv => {
-                if (csv === 'Vazio') return showToast("Sem dados no período.", 'danger');
-                const blob = new Blob(["\ufeff", csv], { type: 'text/csv;charset=utf-8' });
+            google.script.run.withSuccessHandler(resp => {
+                if (resp.error) {
+                    if (resp.error === 'Vazio') return showToast("Sem dados no período.", 'danger');
+                    return showToast(resp.error, 'danger');
+                }
+                const blob = new Blob(["\ufeff", resp.content], { type: 'text/csv;charset=utf-8' });
                 const link = document.createElement("a");
                 link.href = URL.createObjectURL(blob);
-                link.download = `Relatorio_${currentRelType}.csv`;
+                link.download = resp.filename || `Relatorio_${currentRelType}.csv`;
                 link.click();
                 modalRel.hide();
             }).gerarRelatorioCSV(ini, fim, currentRelType);
@@ -1651,7 +1667,7 @@
                 supervisor: document.getElementById('newSupervisor').value
             };
             if (!dados.email) return showToast("Preencha o email.", 'danger');
-            google.script.run.withSuccessHandler(msg => showToast(msg, 'success')).cadastrarUsuario(dados);
+            google.script.run.withSuccessHandler(resp => showToast(resp.error ? resp.error : resp.message, resp.error ? 'danger' : 'success')).cadastrarUsuario(dados);
         }
 
         function checkSupervisorField() {
@@ -1666,13 +1682,13 @@
             const finalId = match ? match[1] : id;
             if (!finalId) return showToast("ID inválido", 'danger');
             if (confirm("Arquivar agora?")) {
-                google.script.run.withSuccessHandler(msg => showToast(msg, 'success')).arquivarMes(finalId);
+                google.script.run.withSuccessHandler(resp => showToast(resp.error ? resp.error : resp.message, resp.error ? 'danger' : 'success')).arquivarMes(finalId);
             }
         }
 
         function deleteUser(e) {
             if (confirm("Deletar usuário " + e + "?")) {
-                google.script.run.withSuccessHandler(msg => showToast(msg, 'success')).excluirUsuario(e);
+                google.script.run.withSuccessHandler(resp => showToast(resp.error ? resp.error : resp.message, resp.error ? 'danger' : 'success')).excluirUsuario(e);
             }
         }
 
