@@ -723,9 +723,9 @@
                     </table>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div id="tab3" class="tab-section hidden">
+        <section id="tab3" class="tab-section hidden">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h3><i class="bi bi-graph-up-arrow"></i> Gestão da Equipe</h3>
                 <div>
@@ -837,7 +837,7 @@
                     </table>
                 </div>
             </div>
-        </div>
+        </section>
 
         <section id="tab5" class="tab-section hidden">
             <header class="d-flex justify-content-between align-items-center mb-4">
@@ -1040,19 +1040,19 @@
             const dataFormatada = new Date(hoje.getTime() - (hoje.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
             document.getElementById('inputData').value = dataFormatada;
             document.getElementById('inputData').max = dataFormatada;
-        };
 
-        toggleForm();
+            toggleForm();
 
-        // 2. Carrega supervisores para cadastro
-        const selSup = document.getElementById('newSupervisor');
-        if (selSup) {
-            google.script.run.withSuccessHandler(list => {
-                if (list) {
-                    selSup.innerHTML = '<option value="">Selecione...</option>';
-                    list.forEach(s => selSup.add(new Option(s, s)));
-                }
-            }).getSupervisoresList();
+            // 2. Carrega supervisores para cadastro
+            const selSup = document.getElementById('newSupervisor');
+            if (selSup) {
+                google.script.run.withSuccessHandler(list => {
+                    if (list) {
+                        selSup.innerHTML = '<option value="">Selecione...</option>';
+                        list.forEach(s => selSup.add(new Option(s, s)));
+                    }
+                }).getSupervisoresList();
+            }
         };
 
         function setupUser(user) {
