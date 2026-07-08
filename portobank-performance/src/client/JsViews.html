@@ -1,0 +1,576 @@
+<script>
+/* ============================================================
+   PortoBank Performance — JsViews
+   ------------------------------------------------------------
+   Cada rota tem uma função Views.<rota>(container) que busca
+   os dados no servidor e renderiza a tela. Os formulários de
+   registro são otimizados para uso DURANTE o atendimento:
+   data preenchida, foco automático, Enter envia, e a tela
+   permanece pronta para o próximo registro.
+   ============================================================ */
+
+const Views = {};
+
+/* ------------------------ Helpers UI ----------------------- */
+function opt(lista, selecionado) {
+  return lista.map(v =>
+    `<option value="${escapeHtml(v)}" ${v === selecionado ? 'selected' : ''}>${escapeHtml(v)}</option>`).join('');
+}
+
+function desenharGraficos(g) {
+  if (!App.cacheCharts) { setTimeout(() => desenharGraficos(g), 300); return; }
+  const gc = google.visualization;
+  const cor = getComputedStyle(document.body).getPropertyValue('--primary').trim();
+  const base = { backgroundColor: 'transparent', legend: { position: 'bottom' },
+                 chartArea: { width: '85%', height: '70%' }, colors: [cor, '#1DB954', '#F5A623'] };
+
+  // Linha: evolução diária
+  const dl = new gc.DataTable();
+  dl.addColumn('number', 'Dia'); dl.addColumn('number', 'Vendas'); dl.addColumn('number', 'Retenções');
+  dl.addRows(g.linha);
+  new gc.LineChart(document.getElementById('ch-linha')).draw(dl, { ...base, curveType: 'function' });
+
+  // Pizza: produtos vendidos
+  const dp = new gc.DataTable();
+  dp.addColumn('string', 'Produto'); dp.addColumn('number', 'Qtd');
+  dp.addRows(Object.entries(g.pizza));
+  new gc.PieChart(document.getElementById('ch-pizza')).draw(dp, { ...base, pieHole: .45 });
+
+  // Colunas: produtos retidos
+  const dc = new gc.DataTable();
+  dc.addColumn('string', 'Produto'); dc.addColumn('number', 'Qtd');
+  dc.addRows(Object.entries(g.colunas));
+  new gc.ColumnChart(document.getElementById('ch-colunas')).draw(dc, base);
+
+  // Gauge: % retenção do mês
+  const dg = gc.arrayToDataTable([['Label', 'Value'], ['% Retenção', window._pctRet || 0]]);
+  new gc.Gauge(document.getElementById('ch-gauge')).draw(dg, {
+    min: 0, max: 100, greenFrom: 80, greenTo: 100, yellowFrom: 60, yellowTo: 80,
+    redFrom: 0, redTo: 60, width: 260, height: 180
+  });
+
+  // Heatmap: dia da semana × hora (desenhado como scatter estilizado)
+  const dias = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const mapa = {};
+  (g.heatmap || []).forEach(([d, h]) => { const k = d + '-' + h; mapa[k] = (mapa[k] || 0) + 1; });
+  const dh = new gc.DataTable();
+  dh.addColumn('number', 'Hora'); dh.addColumn('number', 'Dia');
+  dh.addColumn({ type: 'string', role: 'tooltip' }); dh.addColumn({ type: 'string', role: 'style' });
+  Object.entries(mapa).forEach(([k, qtd]) => {
+    const [d, h] = k.split('-').map(Number);
+    const raio = Math.min(14, 4 + qtd * 2);
+    dh.addRow([h, d, `${dias[d]} ${h}h — ${qtd} registro(s)`, `point {size: ${raio}; fill-color: ${cor}}`]);
+  });
+  new gc.ScatterChart(document.getElementById('ch-heat')).draw(dh, {
+    ...base, legend: 'none',
+    hAxis: { title: 'Hora do dia', minValue: 0, maxValue: 23 },
+    vAxis: { title: 'Dia da semana', ticks: dias.map((d, i) => ({ v: i, f: d })) }
+  });
+}
+
+/* ------------------------- Dashboard ----------------------- */
+Views['dashboard'] = async function (el) {
+  const d = await api('api_dashboard');
+  window._pctRet = d.cartoes.mes.percentualRetencao;
+
+  const kpi = (label, valor, sub) =>
+    `<article class="card kpi">
+       <span class="kpi-label">${label}</span>
+       <span class="kpi-value">${valor}</span>
+       ${sub ? `<span class="kpi-sub">${sub}</span>` : ''}
+     </article>`;
+
+  // Semáforo + progresso de metas (verde/amarelo/vermelho)
+  let metasHtml = '';
+  if (d.progresso && d.progresso.metas.length) {
+    metasHtml = d.progresso.metas.map(m => `
+      <div class="card">
+        <header style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <strong>${escapeHtml(m.meta.produto || m.meta.tipo || 'Meta geral')}</strong>
+          <span class="pill ${m.semaforo}">${m.semaforo === 'verde' ? 'Acima da meta' :
+            m.semaforo === 'amarelo' ? 'Próximo da meta' : 'Abaixo da meta'}</span>
+        </header>
+        <p class="kpi-sub" style="margin:6px 0">
+          Realizado <strong>${m.realizado}</strong> de <strong>${m.alvo}</strong>
+          (${m.percentual}%) — falta <strong>${m.falta}</strong>
+        </p>
+        <div class="progress ${m.semaforo}" role="progressbar"
+             aria-valuenow="${Math.min(100, m.percentual)}" aria-valuemin="0" aria-valuemax="100">
+          <span style="width:${Math.min(100, m.percentual)}%"></span>
+        </div>
+      </div>`).join('');
+  }
+
+  const proxFaixa = d.progresso && d.progresso.proximaFaixa
+    ? `<span class="kpi-sub">Próxima faixa: <strong>${d.progresso.proximaFaixa.faixa}</strong>
+       — faltam <strong>${d.progresso.proximaFaixa.faltaPontos} p.p.</strong></span>` : '';
+
+  el.innerHTML = `
+    <div class="grid grid-kpi">
+      ${kpi('Vendas hoje', d.cartoes.hoje.vendas)}
+      ${kpi('Retenções hoje', d.cartoes.hoje.retencoes)}
+      ${kpi('Vendas no mês', d.cartoes.mes.vendas)}
+      ${kpi('Retenções no mês', d.cartoes.mes.retencoes)}
+      ${kpi('% Retenção (mês)', d.cartoes.mes.percentualRetencao + '%', proxFaixa)}
+      ${kpi('Vendas no ano', d.cartoes.ano.vendas)}
+      ${d.comissao ? kpi('Comissão acumulada', moeda(d.comissao.acumulada),
+                         'Projeção do mês: <strong>' + moeda(d.comissao.projecao) + '</strong>') : ''}
+    </div>
+
+    ${metasHtml ? `<h3 style="margin:20px 0 10px">Minhas metas</h3>
+                   <div class="grid grid-2">${metasHtml}</div>` : ''}
+
+    <h3 style="margin:20px 0 10px">Visão gráfica</h3>
+    <div class="grid grid-2">
+      <section class="card"><h4>Evolução diária (mês)</h4><div id="ch-linha" class="chart"></div></section>
+      <section class="card"><h4>Produtos vendidos</h4><div id="ch-pizza" class="chart"></div></section>
+      <section class="card"><h4>Produtos retidos</h4><div id="ch-colunas" class="chart"></div></section>
+      <section class="card"><h4>% de retenção</h4><div id="ch-gauge" class="chart"></div></section>
+      <section class="card" style="grid-column:1/-1"><h4>Mapa de calor — dia × hora</h4>
+        <div id="ch-heat" class="chart"></div></section>
+    </div>`;
+
+  desenharGraficos(d.graficos);
+};
+
+/* ------------------------ Nova Venda ----------------------- */
+Views['nova-venda'] = async function (el) {
+  const c = App.ctx.catalogos, u = App.ctx.usuario;
+  el.innerHTML = `
+    <section class="card" style="max-width:760px">
+      <h3>Registrar venda</h3>
+      <p class="kpi-sub" style="margin:4px 0 14px">Registro rápido — a tela permanece pronta para o próximo cliente.</p>
+      <form id="f-venda" class="form" autocomplete="off">
+        <div class="form-row">
+          <label class="field">Data
+            <input type="date" name="data" value="${hojeIso()}" required></label>
+          <label class="field">Cliente
+            <input type="text" name="cliente" required placeholder="Nome do cliente" autofocus></label>
+          <label class="field">CPF
+            <input type="text" name="cpf" inputmode="numeric" placeholder="000.000.000-00"></label>
+        </div>
+        <div class="form-row">
+          <label class="field">Produto
+            <select name="produto" required>${opt(c.produtosVenda)}</select></label>
+          <label class="field">Tipo
+            <select name="tipo"><option>Cartão</option></select></label>
+          <label class="field">Canal
+            <select name="canal" ${u.permissoes.canalFixo ? 'disabled' : ''}>
+              ${opt(c.canais, u.permissoes.canalFixo)}</select></label>
+          <label class="field">Status
+            <select name="status">${opt(c.status)}</select></label>
+        </div>
+        <label class="field">Observações
+          <textarea name="observacoes" rows="2" placeholder="Opcional"></textarea></label>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-primary" type="submit">
+            <span class="material-icons-round" aria-hidden="true">check</span> Registrar venda</button>
+          <button class="btn btn-ghost" type="reset">Limpar</button>
+        </div>
+      </form>
+    </section>
+    <section class="card" style="margin-top:16px">
+      <h3>Últimas vendas</h3>
+      <div id="lista-vendas"><p>Carregando…</p></div>
+    </section>`;
+
+  const form = el.querySelector('#f-venda');
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = form.querySelector('button[type=submit]');
+    btn.disabled = true;
+    try {
+      const dados = lerForm(form);
+      if (u.permissoes.canalFixo) dados.canal = u.permissoes.canalFixo;
+      await api('api_vendaRegistrar', dados);
+      toast('Venda registrada!', 'ok');
+      form.reset();
+      form.querySelector('[name=data]').value = hojeIso();
+      form.querySelector('[name=cliente]').focus();   // pronto p/ próximo atendimento
+      carregarLista();
+    } catch (err) { toast(err.message, 'erro'); }
+    btn.disabled = false;
+  });
+
+  async function carregarLista() {
+    const r = await api('api_vendasListar', { pagina: 1, porPagina: 8 });
+    el.querySelector('#lista-vendas').innerHTML = tabela(r.itens,
+      ['data', 'cliente', 'produto', 'canal', 'status'],
+      ['Data', 'Cliente', 'Produto', 'Canal', 'Status']);
+  }
+  carregarLista();
+};
+
+/* ----------------------- Nova Retenção --------------------- */
+Views['nova-retencao'] = async function (el) {
+  const c = App.ctx.catalogos, u = App.ctx.usuario;
+  const p = u.permissoes.registrar || {};
+  const produtos = c.produtosRetencao.filter(x =>
+    (x === 'Conta' && p.retencaoConta) || (x === 'Cartão' && p.retencaoCartao) ||
+    u.perfil === 'ADMIN');
+
+  el.innerHTML = `
+    <section class="card" style="max-width:760px">
+      <h3>Registrar retenção</h3>
+      <form id="f-ret" class="form" autocomplete="off">
+        <div class="form-row">
+          <label class="field">Data<input type="date" name="data" value="${hojeIso()}" required></label>
+          <label class="field">Cliente<input type="text" name="cliente" required autofocus></label>
+          <label class="field">CPF<input type="text" name="cpf" inputmode="numeric"></label>
+        </div>
+        <div class="form-row">
+          <label class="field">Produto<select name="produto" required>${opt(produtos)}</select></label>
+          <label class="field">Tipo de retenção<select name="tipoRetencao">${opt(c.tiposRetencao)}</select></label>
+          <label class="field">Valor concedido (R$)
+            <input type="number" name="valorConcedido" step="0.01" min="0" value="0"></label>
+          <label class="field">Status<select name="status">${opt(c.status)}</select></label>
+        </div>
+        <div class="form-row">
+          <label class="field">Motivo do cancelamento
+            <input type="text" name="motivoCancelamento" placeholder="Por que o cliente quis cancelar"></label>
+          <label class="field">Motivo da retenção
+            <input type="text" name="motivoRetencao" placeholder="O que fez o cliente ficar"></label>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-primary" type="submit">
+            <span class="material-icons-round" aria-hidden="true">check</span> Registrar retenção</button>
+          <button class="btn btn-ghost" type="reset">Limpar</button>
+        </div>
+      </form>
+    </section>
+    <section class="card" style="margin-top:16px">
+      <h3>Últimas retenções</h3>
+      <div id="lista-ret"><p>Carregando…</p></div>
+    </section>`;
+
+  const form = el.querySelector('#f-ret');
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = form.querySelector('button[type=submit]');
+    btn.disabled = true;
+    try {
+      await api('api_retencaoRegistrar', lerForm(form));
+      toast('Retenção registrada!', 'ok');
+      form.reset();
+      form.querySelector('[name=data]').value = hojeIso();
+      form.querySelector('[name=cliente]').focus();
+      carregarLista();
+    } catch (err) { toast(err.message, 'erro'); }
+    btn.disabled = false;
+  });
+
+  async function carregarLista() {
+    const r = await api('api_retencoesListar', { pagina: 1, porPagina: 8 });
+    el.querySelector('#lista-ret').innerHTML = tabela(r.itens,
+      ['data', 'cliente', 'produto', 'tipoRetencao', 'status'],
+      ['Data', 'Cliente', 'Produto', 'Tipo', 'Status']);
+  }
+  carregarLista();
+};
+
+/* -------------------------- Equipe ------------------------- */
+Views['equipe'] = async function (el) {
+  const e = await api('api_minhaEquipe');
+  el.innerHTML = `
+    <div class="grid grid-kpi">
+      <article class="card kpi"><span class="kpi-label">Quantidade total da equipe</span>
+        <span class="kpi-value">${e.quantidadeTotal}</span></article>
+      <article class="card kpi"><span class="kpi-label">% de retenção da equipe</span>
+        <span class="kpi-value">${e.percentualEquipe}%</span></article>
+    </div>
+    <section class="card" style="margin-top:16px">
+      <h3>Membros</h3>
+      ${tabela(e.membros, ['nome', 'perfil'], ['Nome', 'Perfil'])}
+      <p class="kpi-sub" style="margin-top:8px">Comissões e valores individuais de colegas não são exibidos.</p>
+    </section>`;
+};
+
+/* ------------------------- Ranking ------------------------- */
+Views['ranking'] = async function (el) {
+  const [ind, eq, sup] = await Promise.all([
+    api('api_rankingIndividual'), api('api_rankingEquipes'), api('api_rankingSupervisores')
+  ]);
+
+  const linhasInd = ind.map(r =>
+    `<tr class="${r.eu ? 'destaque' : ''}">
+       <td>${r.posicao}º</td><td>${escapeHtml(r.nome)}${r.eu ? ' (você)' : ''}</td>
+       <td>${r.quantidade}</td><td>${r.percentualRetencao}%</td>
+       <td>${r.meta}</td><td>${r.percentualMeta}%</td></tr>`).join('');
+
+  el.innerHTML = `
+    <section class="card">
+      <h3>Ranking individual</h3>
+      <div class="table-wrap"><table class="data">
+        <thead><tr><th>Posição</th><th>Atendente</th><th>Quantidade</th>
+        <th>% Retenção</th><th>Meta</th><th>% Meta</th></tr></thead>
+        <tbody>${linhasInd || '<tr><td colspan="6">Sem registros no mês.</td></tr>'}</tbody>
+      </table></div>
+      <p class="kpi-sub" style="margin-top:8px">O ranking nunca exibe comissão ou valores individuais.</p>
+    </section>
+    <div class="grid grid-2" style="margin-top:16px">
+      <section class="card"><h3>Ranking de equipes</h3>
+        ${tabela(eq, ['posicao', 'nome', 'quantidade', 'percentualRetencao', 'percentualMeta'],
+                 ['Pos.', 'Equipe', 'Qtd', '% Ret.', '% Meta'])}</section>
+      <section class="card"><h3>Ranking de supervisores</h3>
+        ${tabela(sup, ['posicao', 'supervisor', 'quantidade', 'percentualMeta'],
+                 ['Pos.', 'Supervisor', 'Qtd', '% Meta'])}</section>
+    </div>`;
+};
+
+/* ------------------------ Comissões ------------------------ */
+Views['comissoes'] = async function (el) {
+  let c;
+  try { c = await api('api_minhaComissao'); }
+  catch (err) {
+    el.innerHTML = `<section class="card"><p>${escapeHtml(err.message)}</p></section>`;
+    return;
+  }
+
+  const itens = (c.comissao.itens || []).map(i =>
+    `<tr><td>${escapeHtml(i.regra)}</td>
+         <td>${escapeHtml(i.faixa || i.metrica || '')}</td>
+         <td>${i.quantidade ?? i.valorMetrica ?? ''}</td>
+         <td>${moeda(i.valor)}</td></tr>`).join('');
+  const bons = (c.bonificacoes.itens || []).map(i =>
+    `<tr><td>${escapeHtml(i.bonificacao)}</td><td colspan="2"></td><td>${moeda(i.valor)}</td></tr>`).join('');
+
+  el.innerHTML = `
+    <div class="grid grid-kpi">
+      <article class="card kpi"><span class="kpi-label">Comissão acumulada (${c.competencia})</span>
+        <span class="kpi-value">${moeda(c.total)}</span>
+        <span class="kpi-sub">Motor: ${c.comissao.motor} · Canal: ${c.canal}</span></article>
+      <article class="card kpi"><span class="kpi-label">Projeção de fechamento</span>
+        <span class="kpi-value">${moeda(c.projecao)}</span>
+        <span class="kpi-sub">Estimativa linear pelo ritmo atual</span></article>
+      ${c.comissao.percentualRetencao !== undefined
+        ? `<article class="card kpi"><span class="kpi-label">% Retenção considerado</span>
+             <span class="kpi-value">${c.comissao.percentualRetencao}%</span></article>` : ''}
+    </div>
+    <section class="card" style="margin-top:16px">
+      <h3>Memória de cálculo</h3>
+      <div class="table-wrap"><table class="data">
+        <thead><tr><th>Regra</th><th>Faixa / Métrica</th><th>Qtd</th><th>Valor</th></tr></thead>
+        <tbody>${itens || '<tr><td colspan="4">Nenhuma regra atingida ainda — cadastre as regras em Configurações.</td></tr>'}
+        ${bons}</tbody>
+      </table></div>
+    </section>`;
+};
+
+/* --------------------------- Metas ------------------------- */
+Views['metas'] = async function (el) {
+  const p = await api('api_progresso');
+  const linhas = p.metas.map(m =>
+    `<tr><td>${escapeHtml(m.meta.produto || '-')}</td><td>${escapeHtml(m.meta.tipo || '-')}</td>
+         <td>${m.alvo}</td><td>${m.realizado}</td><td>${m.percentual}%</td>
+         <td><span class="pill ${m.semaforo}">${m.semaforo}</span></td></tr>`).join('');
+  el.innerHTML = `
+    <section class="card">
+      <h3>Minhas metas — ${p.competencia}</h3>
+      <div class="table-wrap"><table class="data">
+        <thead><tr><th>Produto</th><th>Tipo</th><th>Meta</th><th>Realizado</th><th>%</th><th>Status</th></tr></thead>
+        <tbody>${linhas || '<tr><td colspan="6">Nenhuma meta cadastrada para você neste mês.</td></tr>'}</tbody>
+      </table></div>
+    </section>`;
+};
+
+/* ------------------------ Relatórios ----------------------- */
+Views['relatorios'] = async function (el) {
+  el.innerHTML = `
+    <section class="card" style="max-width:760px">
+      <h3>Exportar relatório</h3>
+      <form id="f-rel" class="form">
+        <div class="form-row">
+          <label class="field">Origem
+            <select name="origem"><option value="vendas">Vendas</option>
+            <option value="retencoes">Retenções</option></select></label>
+          <label class="field">Início<input type="date" name="inicio"></label>
+          <label class="field">Fim<input type="date" name="fim"></label>
+        </div>
+        <div class="form-row">
+          <label class="field">Canal<select name="canal"><option value="">Todos</option>
+            ${opt(App.ctx.catalogos.canais)}</select></label>
+          <label class="field">Produto<input type="text" name="produto" placeholder="Todos"></label>
+          <label class="field">Atendente (e-mail)<input type="email" name="atendente" placeholder="Todos"></label>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" data-fmt="csv" type="button">Exportar CSV</button>
+          <button class="btn btn-ghost" data-fmt="excel" type="button">Exportar Excel</button>
+          <button class="btn btn-ghost" data-fmt="pdf" type="button">Exportar PDF</button>
+        </div>
+      </form>
+    </section>`;
+
+  el.querySelectorAll('[data-fmt]').forEach(btn => btn.addEventListener('click', async () => {
+    const opts = lerForm(el.querySelector('#f-rel'));
+    btn.disabled = true;
+    try {
+      if (btn.dataset.fmt === 'csv') {
+        const r = await api('api_exportCsv', opts);
+        const blob = new Blob(["\ufeff" + r.conteudo], { type: 'text/csv;charset=utf-8' });
+        const a = Object.assign(document.createElement('a'),
+          { href: URL.createObjectURL(blob), download: r.nome });
+        a.click();
+      } else {
+        const fn = btn.dataset.fmt === 'excel' ? 'api_exportExcel' : 'api_exportPdf';
+        const r = await api(fn, opts);
+        window.open(r.url, '_blank');
+      }
+      toast('Relatório gerado.', 'ok');
+    } catch (err) { toast(err.message, 'erro'); }
+    btn.disabled = false;
+  }));
+};
+
+/* ------------------------- Cadastros ----------------------- */
+Views['cadastros'] = async function (el) {
+  const perfis = App.ctx.catalogos.perfis;
+  el.innerHTML = `
+    <section class="card" style="max-width:760px">
+      <h3>Cadastrar / atualizar usuário</h3>
+      <p class="kpi-sub">O acesso é liberado pelo e-mail Google — sem senha.</p>
+      <form id="f-usu" class="form" style="margin-top:10px">
+        <div class="form-row">
+          <label class="field">E-mail Google<input type="email" name="email" required></label>
+          <label class="field">Nome<input type="text" name="nome" required></label>
+        </div>
+        <div class="form-row">
+          <label class="field">Perfil<select name="perfil">${opt(perfis)}</select></label>
+          <label class="field">Supervisor (e-mail)<input type="email" name="supervisorEmail"></label>
+          <label class="field">Equipe (id)<input type="text" name="equipeId"></label>
+        </div>
+        <button class="btn btn-primary" type="submit">Salvar usuário</button>
+      </form>
+    </section>
+    <section class="card" style="margin-top:16px">
+      <div class="toolbar">
+        <h3 style="flex:1">Usuários</h3>
+        <input type="search" id="busca-usu" placeholder="Buscar…" aria-label="Buscar usuários">
+      </div>
+      <div id="lista-usu"><p>Carregando…</p></div>
+    </section>`;
+
+  el.querySelector('#f-usu').addEventListener('submit', async e => {
+    e.preventDefault();
+    try {
+      await api('api_usuarioSalvar', lerForm(e.target));
+      toast('Usuário salvo.', 'ok'); e.target.reset(); listarUsu();
+    } catch (err) { toast(err.message, 'erro'); }
+  });
+
+  let t;
+  el.querySelector('#busca-usu').addEventListener('input', ev => {
+    clearTimeout(t); t = setTimeout(() => listarUsu(ev.target.value), 350);
+  });
+
+  async function listarUsu(busca) {
+    const r = await api('api_usuariosListar', { busca, porPagina: 20 });
+    const linhas = r.itens.map(u =>
+      `<tr><td>${escapeHtml(u.nome)}</td><td>${escapeHtml(u.email)}</td>
+           <td>${escapeHtml(String(u.perfil).replaceAll('_',' '))}</td>
+           <td>${u.ativo === false || String(u.ativo) === 'false' ? 'Inativo' : 'Ativo'}</td>
+           <td><button class="btn btn-danger" data-del="${u.id}" style="padding:6px 10px">Excluir</button></td></tr>`).join('');
+    el.querySelector('#lista-usu').innerHTML =
+      `<div class="table-wrap"><table class="data">
+         <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Status</th><th></th></tr></thead>
+         <tbody>${linhas || '<tr><td colspan="5">Nenhum usuário.</td></tr>'}</tbody></table></div>`;
+    el.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Desativar este usuário?')) return;
+      try { await api('api_usuarioExcluir', b.dataset.del); toast('Usuário desativado.', 'ok'); listarUsu(); }
+      catch (err) { toast(err.message, 'erro'); }
+    }));
+  }
+  listarUsu();
+};
+
+/* ----------------------- Configurações --------------------- */
+/* CRUD genérico dirigido pelo schema do servidor: qualquer
+   tabela de regras (percentuais, faixas, bônus, metas,
+   campanhas) é editada aqui — nunca no código. */
+Views['configuracoes'] = async function (el) {
+  const tabelas = ['Produtos', 'RegrasComissao', 'RegrasFone', 'RegrasRetencao',
+                   'Bonificacoes', 'Faixas', 'Metas', 'Campanhas', 'Equipes'];
+  el.innerHTML = `
+    <section class="card">
+      <div class="toolbar">
+        <label class="field" style="min-width:220px">Tabela de configuração
+          <select id="sel-tab">${opt(tabelas)}</select></label>
+        <button class="btn btn-primary" id="btn-novo">
+          <span class="material-icons-round" aria-hidden="true">add</span> Novo registro</button>
+      </div>
+      <p class="kpi-sub" style="margin-bottom:10px">
+        Percentuais, faixas (73%, 75%, 78%…), bônus e metas moram nestas tabelas.
+        Alterou aqui, o motor de comissão já usa o novo valor — sem mexer em código.</p>
+      <div id="cfg-form" class="hidden card" style="margin-bottom:14px"></div>
+      <div id="cfg-lista"><p>Escolha uma tabela.</p></div>
+    </section>`;
+
+  const sel = el.querySelector('#sel-tab');
+  sel.addEventListener('change', carregar);
+  el.querySelector('#btn-novo').addEventListener('click', () => abrirForm({}));
+  carregar();
+
+  async function carregar() {
+    const tab = sel.value;
+    const [schema, dados] = await Promise.all([
+      api('api_configSchema', tab), api('api_configListar', tab, { porPagina: 50 })
+    ]);
+    el._schema = schema;
+    const cols = schema.filter(c => c !== 'id').slice(0, 7);
+    const linhas = dados.itens.map(r =>
+      `<tr>${cols.map(c => `<td>${escapeHtml(r[c])}</td>`).join('')}
+        <td><button class="btn btn-ghost" data-edit='${escapeHtml(JSON.stringify(r))}' style="padding:6px 10px">Editar</button>
+            <button class="btn btn-danger" data-rm="${r.id}" style="padding:6px 10px">Excluir</button></td></tr>`).join('');
+    el.querySelector('#cfg-lista').innerHTML =
+      `<div class="table-wrap"><table class="data">
+        <thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead>
+        <tbody>${linhas || `<tr><td colspan="${cols.length + 1}">Tabela vazia — clique em “Novo registro”.</td></tr>`}</tbody>
+      </table></div>`;
+
+    el.querySelectorAll('[data-edit]').forEach(b =>
+      b.addEventListener('click', () => abrirForm(JSON.parse(b.dataset.edit))));
+    el.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', async () => {
+      if (!confirm('Excluir/desativar este registro?')) return;
+      try { await api('api_configExcluir', sel.value, b.dataset.rm); toast('Removido.', 'ok'); carregar(); }
+      catch (err) { toast(err.message, 'erro'); }
+    }));
+  }
+
+  function abrirForm(reg) {
+    const box = el.querySelector('#cfg-form');
+    const campos = el._schema.filter(c => c !== 'id' && c !== '_row');
+    box.classList.remove('hidden');
+    box.innerHTML = `
+      <h4>${reg.id ? 'Editar ' + reg.id : 'Novo registro'} — ${sel.value}</h4>
+      <form class="form" style="margin-top:10px">
+        <div class="form-row">
+          ${campos.map(c => `<label class="field">${c}
+            <input type="text" name="${c}" value="${escapeHtml(reg[c] ?? '')}"></label>`).join('')}
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="btn btn-primary" type="submit">Salvar</button>
+          <button class="btn btn-ghost" type="button" id="btn-cancel">Cancelar</button>
+        </div>
+      </form>`;
+    box.querySelector('#btn-cancel').addEventListener('click', () => box.classList.add('hidden'));
+    box.querySelector('form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const payload = lerForm(e.target);
+      if (reg.id) payload.id = reg.id;
+      try { await api('api_configSalvar', sel.value, payload); toast('Salvo.', 'ok');
+            box.classList.add('hidden'); carregar(); }
+      catch (err) { toast(err.message, 'erro'); }
+    });
+  }
+};
+
+/* --------------------- Tabela genérica --------------------- */
+function tabela(itens, campos, titulos) {
+  if (!itens || !itens.length) return '<p class="kpi-sub">Nenhum registro.</p>';
+  const linhas = itens.map(r =>
+    `<tr>${campos.map(c => `<td>${escapeHtml(typeof r[c] === 'string' && r[c].includes('T') && c === 'data'
+      ? r[c].slice(0, 10) : r[c])}</td>`).join('')}</tr>`).join('');
+  return `<div class="table-wrap"><table class="data">
+    <thead><tr>${titulos.map(t => `<th>${t}</th>`).join('')}</tr></thead>
+    <tbody>${linhas}</tbody></table></div>`;
+}
+</script>

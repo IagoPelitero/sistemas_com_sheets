@@ -1,0 +1,197 @@
+<script>
+/* ============================================================
+   PortoBank Performance — JsApp (núcleo da SPA)
+   ------------------------------------------------------------
+   Responsabilidades:
+     - Bootstrap (contexto do usuário via login Google)
+     - Roteamento por hash (#/rota)
+     - Cliente da API (google.script.run com Promises)
+     - Menu dinâmico por perfil
+     - Troca de tema (persistida em localStorage)
+     - Toast de feedback
+   ============================================================ */
+
+const App = {
+  ctx: null,            // usuário + catálogos vindos do servidor
+  rota: 'dashboard',
+  cacheCharts: false
+};
+
+/* -------------------- Cliente da API ---------------------- */
+/** Chama uma função api_* do servidor devolvendo Promise */
+function api(fn, ...args) {
+  return new Promise((resolve, reject) => {
+    google.script.run
+      .withSuccessHandler(res => res.ok ? resolve(res.dados) : reject(new Error(res.erro)))
+      .withFailureHandler(err => reject(err))
+      [fn](...args);
+  });
+}
+
+/* ------------------------- Toast -------------------------- */
+function toast(msg, tipo) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + (tipo || '');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 3200);
+}
+
+/* ------------------------- Tema --------------------------- */
+function aplicarTema(nome) {
+  document.body.dataset.theme = nome;
+  try { localStorage.setItem('pbp_tema', nome); } catch (e) {}
+}
+
+/* ----------------------- Menu/perfil ---------------------- */
+/** Define quais itens de menu cada perfil enxerga */
+function itensMenu(perfil) {
+  const todos = [
+    { rota: 'dashboard',     icone: 'space_dashboard', label: 'Dashboard' },
+    { rota: 'nova-venda',    icone: 'add_shopping_cart', label: 'Nova Venda',    registra: 'venda' },
+    { rota: 'nova-retencao', icone: 'handshake',       label: 'Nova Retenção',  registra: 'retencao' },
+    { rota: 'equipe',        icone: 'groups',          label: 'Equipe' },
+    { rota: 'ranking',       icone: 'emoji_events',    label: 'Ranking' },
+    { rota: 'comissoes',     icone: 'payments',        label: 'Comissões' },
+    { rota: 'metas',         icone: 'flag',            label: 'Metas' },
+    { rota: 'relatorios',    icone: 'description',     label: 'Relatórios',    admin_sup: true },
+    { rota: 'cadastros',     icone: 'person_add',      label: 'Cadastros',     admin: true },
+    { rota: 'configuracoes', icone: 'settings',        label: 'Configurações', admin: true }
+  ];
+  const p = App.ctx.usuario.permissoes || {};
+  return todos.filter(i => {
+    if (i.admin && perfil !== 'ADMIN') return false;
+    if (i.admin_sup && !(perfil === 'ADMIN' || perfil === 'SUPERVISOR')) return false;
+    if (i.registra === 'venda' && !(p.registrar && p.registrar.vendaCartao)) return false;
+    if (i.registra === 'retencao' &&
+        !(p.registrar && (p.registrar.retencaoConta || p.registrar.retencaoCartao))) return false;
+    return true;
+  });
+}
+
+function montarMenu() {
+  const ul = document.getElementById('menu');
+  ul.innerHTML = '';
+  itensMenu(App.ctx.usuario.perfil).forEach(item => {
+    const li = document.createElement('li');
+    li.setAttribute('role', 'none');
+    li.innerHTML =
+      `<a href="#/${item.rota}" role="menuitem" data-rota="${item.rota}">
+         <span class="material-icons-round" aria-hidden="true">${item.icone}</span>
+         <span class="menu-label">${item.label}</span>
+       </a>`;
+    ul.appendChild(li);
+  });
+}
+
+/* ------------------------ Roteador ------------------------ */
+const TITULOS = {
+  'dashboard': 'Dashboard', 'nova-venda': 'Nova Venda', 'nova-retencao': 'Nova Retenção',
+  'equipe': 'Equipe', 'ranking': 'Ranking', 'comissoes': 'Comissões', 'metas': 'Metas',
+  'relatorios': 'Relatórios', 'cadastros': 'Cadastros', 'configuracoes': 'Configurações'
+};
+
+function navegar() {
+  const rota = (location.hash || '#/dashboard').replace('#/', '') || 'dashboard';
+  App.rota = rota;
+  document.getElementById('page-title').textContent = TITULOS[rota] || rota;
+
+  // marca item ativo do menu
+  document.querySelectorAll('#menu a').forEach(a =>
+    a.classList.toggle('active', a.dataset.rota === rota));
+
+  // fecha menu no mobile e devolve foco ao conteúdo (acessibilidade)
+  document.getElementById('sidebar').classList.remove('open');
+  const content = document.getElementById('content');
+  content.innerHTML = '<section class="card"><p>Carregando…</p></section>';
+  content.focus({ preventScroll: true });
+
+  const view = Views[rota] || Views.dashboard;
+  view(content).catch(err => {
+    content.innerHTML =
+      `<section class="card"><h3>Não foi possível carregar</h3><p>${escapeHtml(err.message)}</p></section>`;
+  });
+}
+
+/* --------------------- Utilidades front -------------------- */
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function moeda(n) {
+  return (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+function hojeIso() { return new Date().toISOString().slice(0, 10); }
+
+/** Coleta os campos de um <form> em objeto {name: value} */
+function lerForm(form) {
+  const dados = {};
+  new FormData(form).forEach((v, k) => dados[k] = v);
+  return dados;
+}
+
+/* ------------------------ Bootstrap ------------------------ */
+async function iniciar() {
+  // tema salvo
+  try { aplicarTema(localStorage.getItem('pbp_tema') || 'portobank'); } catch (e) {}
+
+  // Google Charts em paralelo com o contexto
+  google.charts.load('current', { packages: ['corechart', 'gauge'] });
+  google.charts.setOnLoadCallback(() => { App.cacheCharts = true; });
+
+  try {
+    App.ctx = await api('api_contexto');
+  } catch (err) {
+    document.getElementById('splash').innerHTML =
+      `<h1>Erro ao iniciar</h1><p>${escapeHtml(err.message)}</p>`;
+    return;
+  }
+
+  document.getElementById('splash').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+
+  const u = App.ctx.usuario;
+  if (!u.autorizado) {
+    // conta Google identificada, mas sem cadastro
+    const tpl = document.getElementById('tpl-negado').content.cloneNode(true);
+    tpl.getElementById?.('negado-email');
+    document.getElementById('content').replaceChildren(tpl);
+    document.getElementById('negado-email').textContent = u.email;
+    document.getElementById('menu').innerHTML = '';
+    document.getElementById('user-name').textContent = u.email;
+    document.getElementById('user-role').textContent = 'Sem cadastro';
+    return;
+  }
+
+  // Identificação automática (login Google, sem senha)
+  document.getElementById('user-name').textContent = u.nome;
+  document.getElementById('user-role').textContent = u.perfil.replaceAll('_', ' ');
+  document.getElementById('user-avatar').textContent = (u.nome || u.email)[0];
+  document.getElementById('user-chip').title = u.email;
+
+  montarMenu();
+  navegar();
+}
+
+/* ------------------------ Eventos -------------------------- */
+window.addEventListener('hashchange', navegar);
+window.addEventListener('DOMContentLoaded', () => {
+  iniciar();
+
+  // recolher/expandir sidebar
+  document.getElementById('btn-collapse').addEventListener('click', () =>
+    document.getElementById('sidebar').classList.toggle('collapsed'));
+
+  // menu mobile
+  document.getElementById('btn-menu-mobile').addEventListener('click', () =>
+    document.getElementById('sidebar').classList.toggle('open'));
+
+  // ações rápidas da topbar
+  document.querySelectorAll('[data-goto]').forEach(b =>
+    b.addEventListener('click', () => location.hash = '#/' + b.dataset.goto));
+
+  // troca de tema
+  document.querySelectorAll('[data-theme-set]').forEach(b =>
+    b.addEventListener('click', () => aplicarTema(b.dataset.themeSet)));
+});
+</script>

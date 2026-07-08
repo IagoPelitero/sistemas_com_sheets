@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="PortoBank Performance — Gestão de Vendas, Retenção e Comissionamento">
+  <title>PortoBank Performance</title>
+
+  <!-- Ícones Material Design + fonte -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Google Charts -->
+  <script src="https://www.gstatic.com/charts/loader.js"></script>
+
+  <?!= include('client/Styles'); ?>
+</head>
+
+<body data-theme="portobank">
+
+  <!-- Tela de carregamento -->
+  <div id="splash" role="status" aria-live="polite">
+    <div class="splash-logo" aria-hidden="true">PB</div>
+    <h1>PortoBank Performance</h1>
+    <p>Gestão de Vendas, Retenção e Comissionamento para N1, N2 e N2 digital</p>
+    <div class="loader" aria-label="Carregando"></div>
+  </div>
+
+  <!-- Estrutura semântica da aplicação -->
+  <div id="app" class="app hidden">
+
+    <!-- Menu lateral recolhível -->
+    <nav id="sidebar" class="sidebar" aria-label="Menu principal">
+      <div class="sidebar-brand">
+        <span class="brand-badge" aria-hidden="true">PB</span>
+        <span class="brand-text">
+          <strong>PortoBank</strong>
+          <small>Performance</small>
+        </span>
+        <button id="btn-collapse" class="icon-btn" aria-label="Recolher menu" title="Recolher menu">
+          <span class="material-icons-round" aria-hidden="true">chevron_left</span>
+        </button>
+      </div>
+
+      <ul id="menu" class="menu" role="menubar">
+        <!-- itens injetados por JS conforme o perfil -->
+      </ul>
+
+      <footer class="sidebar-footer">
+        <div id="user-chip" class="user-chip" title="">
+          <span class="avatar" id="user-avatar" aria-hidden="true">?</span>
+          <span class="user-info">
+            <strong id="user-name">—</strong>
+            <small id="user-role">—</small>
+          </span>
+        </div>
+      </footer>
+    </nav>
+
+    <!-- Área principal -->
+    <div class="main-wrap">
+      <header class="topbar">
+        <button id="btn-menu-mobile" class="icon-btn only-mobile" aria-label="Abrir menu">
+          <span class="material-icons-round" aria-hidden="true">menu</span>
+        </button>
+
+        <h2 id="page-title">Dashboard</h2>
+
+        <div class="topbar-actions">
+          <!-- Ações rápidas: registrar sem sair da tela -->
+          <button class="btn btn-primary quick" data-goto="nova-venda">
+            <span class="material-icons-round" aria-hidden="true">add_shopping_cart</span>
+            <span class="quick-label">Nova venda</span>
+          </button>
+          <button class="btn btn-ghost quick" data-goto="nova-retencao">
+            <span class="material-icons-round" aria-hidden="true">handshake</span>
+            <span class="quick-label">Nova retenção</span>
+          </button>
+
+          <!-- Troca de tema -->
+          <div class="theme-switch" role="group" aria-label="Trocar tema de cores">
+            <button data-theme-set="portobank" title="Tema PortoBank" aria-label="Tema PortoBank"></button>
+            <button data-theme-set="rosa"      title="Tema Rosa"      aria-label="Tema Rosa"></button>
+            <button data-theme-set="brasil"    title="Tema Brasil"    aria-label="Tema Brasil"></button>
+            <button data-theme-set="dark"      title="Tema Dark"      aria-label="Tema Dark"></button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Conteúdo das páginas -->
+      <main id="content" class="content" tabindex="-1" aria-live="polite">
+        <!-- views renderizadas por JS -->
+      </main>
+    </div>
+  </div>
+
+  <!-- Toast de feedback -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive"></div>
+
+  <!-- Tela de acesso negado -->
+  <template id="tpl-negado">
+    <section class="card center-card">
+      <span class="material-icons-round big-icon" aria-hidden="true">lock</span>
+      <h3>Acesso não autorizado</h3>
+      <p>Sua conta Google foi identificada, mas ainda não está cadastrada no sistema.
+         Solicite o cadastro ao administrador informando seu e-mail.</p>
+      <p class="mono" id="negado-email"></p>
+    </section>
+  </template>
+
+  <?!= include('client/JsApp'); ?>
+  <?!= include('client/JsViews'); ?>
+</body>
+</html>
