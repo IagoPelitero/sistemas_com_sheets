@@ -112,10 +112,21 @@ const App = (function () {
       if (btn) { go(btn.dataset.page); document.getElementById('sidebar').classList.remove('open'); }
     });
 
-    // Usuário
+    // Usuário: sempre o NOME (nunca o e-mail) + cargo + contexto:
+    //  - Atendente  → Supervisão: <nome do supervisor da equipe>
+    //  - Supervisor → Equipe: <nome da equipe>
+    //  - ADMIN      → Supervisão, se houver equipe/supervisor cadastrado
     document.getElementById('userName').textContent = s.user.nome;
     document.getElementById('userRole').textContent = s.user.cargo;
     document.getElementById('userAvatar').textContent = s.user.nome.slice(0, 2).toUpperCase();
+    const extra = document.getElementById('userExtra');
+    if (s.permissions.scope === 'self') {
+      extra.textContent = 'Supervisão: ' + (s.supervisao || '—');
+    } else if (s.permissions.scope === 'team') {
+      extra.textContent = 'Equipe: ' + (s.user.equipe || '—');
+    } else {
+      extra.textContent = s.supervisao ? 'Supervisão: ' + s.supervisao : '';
+    }
 
     // Temas
     const row = document.getElementById('themeRow');
@@ -240,41 +251,37 @@ const App = (function () {
         let html = '';
 
         // Cards superiores
-        html += '<div class="grid kpis">';
-        html += kpi('Vendas', d.cards.vendas, 'Meta: ' + d.cards.metaVendas + ' · Restam ' + d.cards.restanteVendas);
-        html += kpi('Comissão', BRL(d.cards.comissao), 'Meta: ' + BRL(d.cards.metaComissao), 'ok');
-        html += kpi('Progresso da meta', d.cards.progressoComissao + '%', progressBar(d.cards.progressoComissao),
-          d.cards.progressoComissao >= 100 ? 'ok' : d.cards.progressoComissao >= 60 ? '' : 'warn');
-        html += '</div>';
-
-        // Blocos de retenção (apenas perfis com retenção)
-        if (hasRet) {
+        if (!hasRet) {
+          // Perfis somente vendas: vendas + comissão + progresso
+          html += '<div class="grid kpis">';
+          html += kpi('Vendas', d.cards.vendas, 'Meta: ' + d.cards.metaVendas + ' · Restam ' + d.cards.restanteVendas);
+          html += kpi('Comissão', BRL(d.cards.comissao), 'Meta: ' + BRL(d.cards.metaComissao), 'ok');
+          html += kpi('Progresso da meta', d.cards.progressoComissao + '%', progressBar(d.cards.progressoComissao),
+            d.cards.progressoComissao >= 100 ? 'ok' : d.cards.progressoComissao >= 60 ? '' : 'warn');
+          html += '</div>';
+        } else {
+          // Perfis com retenção: layout enxuto —
+          // quantidade de vendas + %s de retenção (cartão, conta e
+          // cashback), e ao final UM bloco de comissão com progresso.
           const r = d.retencao;
-          html += '<h2 class="section-title">Retenção — Cartão de Crédito</h2><div class="grid kpis">';
-          html += kpi('% Retidos', r.cartao.pctRetidos + '%', r.cartao.retidos + ' de ' + r.cartao.atendidos + ' atendidos', 'ok');
-          html += kpi('% Argumentação', r.cartao.pctArgumentacao + '%', r.cartao.argumentados + ' argumentados');
-          html += kpi('% Cancelados', r.cartao.pctCancelados + '%', r.cartao.cancelados + ' cancelados', 'bad');
-          html += kpi('Atendidos', r.cartao.atendidos, 'no mês');
+          html += '<div class="grid kpis">';
+          html += kpi('Vendas', d.cards.vendas, 'Meta: ' + d.cards.metaVendas + ' · Restam ' + d.cards.restanteVendas);
+          html += kpi('% Retenção Cartão', r.cartao.pctRetidos + '%',
+            r.cartao.retidos + ' de ' + r.cartao.atendidos + ' · Arg. ' + r.cartao.pctArgumentacao + '%', 'ok');
+          html += kpi('% Retenção Conta', r.conta.pctRetidos + '%',
+            r.conta.retidos + ' de ' + r.conta.atendidos + ' atendidos', 'ok');
+          html += kpi('% Cashback', r.cashback.pctCashback + '%',
+            r.cashback.cashback + ' de ' + r.cashback.atendidos + ' · Milhas ' + r.cashback.pctMilhas + '%', 'ok');
           html += '</div>';
 
-          html += '<h2 class="section-title">Retenção — Conta Digital</h2><div class="grid kpis">';
-          html += kpi('% Retidos', r.conta.pctRetidos + '%', r.conta.retidos + ' retidos', 'ok');
-          html += kpi('% Cancelados', r.conta.pctCancelados + '%', r.conta.cancelados + ' cancelados', 'bad');
-          html += kpi('Atendidos', r.conta.atendidos, 'no mês');
-          html += '</div>';
-
-          html += '<h2 class="section-title">Cashback</h2><div class="grid kpis">';
-          html += kpi('% Cashback', r.cashback.pctCashback + '%', r.cashback.cashback + ' conversões', 'ok');
-          html += kpi('% Milhas', r.cashback.pctMilhas + '%', r.cashback.milhas + ' em milhas');
-          html += kpi('Atendidos', r.cashback.atendidos, 'no mês');
-          html += '</div>';
-
-          html += '<h2 class="section-title">Comissão (Vendas + Retenção)</h2><div class="grid kpis">';
-          html += kpi('Vendas', BRL(d.comissao.totalVendas));
-          html += kpi('Retenção', BRL(d.comissao.totalRetencao));
-          html += kpi('Total atual', BRL(d.comissao.total), 'Meta: ' + BRL(d.cards.metaComissao), 'ok');
-          html += kpi('Progresso', d.cards.progressoComissao + '%', progressBar(d.cards.progressoComissao));
-          html += '</div>';
+          // Bloco final: comissão total estipulada + barra de progresso
+          html += '<div class="card" style="margin-top:16px">' +
+            '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px">' +
+            '<h3 style="margin:0">Comissão do mês</h3>' +
+            '<span class="muted">Vendas ' + BRL(d.comissao.totalVendas) + ' · Retenção ' + BRL(d.comissao.totalRetencao) + '</span></div>' +
+            '<div class="kpi-value" style="margin-top:6px">' + BRL(d.comissao.total) +
+            ' <span class="kpi-sub">de ' + BRL(d.cards.metaComissao) + ' estipulados (' + d.cards.progressoComissao + '%)</span></div>' +
+            progressBar(d.cards.progressoComissao) + '</div>';
         }
 
         // Gráfico de evolução diária
@@ -482,11 +489,13 @@ const App = (function () {
         const settings = res[0]; state.session = res[1];
         const prods = state.session.products;
         let html = '<div class="card"><h3>Parâmetros e comissões</h3>' +
-          '<p class="muted">Regras de comissão, metas padrão e parâmetros — tudo editável aqui, sem abrir o Sheets. Valores marcados com "ajustar conforme PDF" usam padrões provisórios.</p>';
+          '<p class="muted">Regras de comissão, metas padrão e parâmetros — tudo editável aqui, sem abrir o Sheets.</p>';
         settings.filter(function (s) { return String(s.chave).indexOf('sistema.') !== 0; }).forEach(function (s) {
-          html += '<div class="settings-row"><div><strong>' + esc(s.chave) + '</strong><small>' + esc(s.descricao) + '</small></div>' +
-            '<input id="set_' + btoa(s.chave).replace(/=/g, '') + '" value="' + esc(s.valor) + '">' +
-            '<button class="btn small" onclick="App.saveSetting(\'' + esc(s.chave) + '\',\'set_' + btoa(s.chave).replace(/=/g, '') + '\')">Salvar</button></div>';
+          const eid = 'set_' + btoa(s.chave).replace(/[^a-zA-Z0-9]/g, '');
+          html += '<div class="setting-item">' +
+            '<div class="setting-head"><div><strong>' + esc(s.descricao || s.chave) + '</strong><small>' + esc(s.chave) + '</small></div>' +
+            '<button class="btn small" onclick="App.saveSetting(\'' + esc(s.chave) + '\',\'' + eid + '\')">Salvar</button></div>' +
+            settingEditor(s, eid) + '</div>';
         });
         html += '</div>';
 
@@ -631,8 +640,102 @@ const App = (function () {
   }
 
   /** Salvar configuração individual (ADMIN). */
-  function saveSetting(chave, inputId) {
-    api('settings.update', { chave: chave, valor: document.getElementById(inputId).value }).then(function () {
+  // ---- Editor amigável de parâmetros (nunca exibe JSON cru) ----
+  // Rótulos das colunas para regras em formato de lista de faixas.
+  const SETTING_LABELS = {
+    pct: '% a partir de', valor: 'Prêmio (R$)', min: '% mín.', max: '% máx.',
+    retidos: '% retidos', argumentacao: '% argumentação'
+  };
+  // Cabeçalhos das tabelas produto × faixa (R$ por venda/retido).
+  const SETTING_COLS = {
+    'comissao.vendas.tabela': ['Até 60%', '60–79,99%', '80–100%', 'Acima de 100%'],
+    'comissao.massificados.arg': ['Conv. 15%', 'Conv. 30%', 'Conv. 50%', 'Conv. 60%'],
+    'comissao.massificados.inc': ['Conv. 60%', 'Conv. 65%', 'Conv. 70%', 'Conv. 75%']
+  };
+
+  /** Detecta o formato do valor e devolve o editor adequado. */
+  function settingEditor(s, eid) {
+    let v = null;
+    try { v = JSON.parse(s.valor); } catch (e) { /* texto/número simples */ }
+
+    // Lista de faixas: [{pct, valor}, ...] e variações
+    if (Array.isArray(v) && v.length && typeof v[0] === 'object') {
+      const keys = Object.keys(v[0]);
+      return '<div id="' + eid + '" class="setting-editor" data-shape="rows" data-keys="' + keys.join(',') + '">' +
+        '<div class="table-wrap"><table><thead><tr>' +
+        keys.map(function (k) { return '<th>' + esc(SETTING_LABELS[k] || k) + '</th>'; }).join('') +
+        '</tr></thead><tbody>' +
+        v.map(function (row) {
+          return '<tr>' + keys.map(function (k) {
+            return '<td><input type="number" step="any" data-k="' + k + '" value="' + esc(row[k]) + '"></td>';
+          }).join('') + '</tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }
+
+    // Lista de números: faixas de conversão [15, 30, 50, 60]
+    if (Array.isArray(v) && v.every(function (n) { return typeof n === 'number'; })) {
+      return '<div id="' + eid + '" class="setting-editor nums" data-shape="nums">' +
+        v.map(function (n, i) {
+          return '<label class="num-cell">Faixa ' + (i + 1) + ' (%)' +
+            '<input type="number" step="any" value="' + n + '"></label>';
+        }).join('') + '</div>';
+    }
+
+    // Mapa produto → valores por faixa: {"Guincho": [3, 3.5, 4, 5], ...}
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const nomes = Object.keys(v);
+      const nCols = (v[nomes[0]] || []).length;
+      const cols = SETTING_COLS[s.chave] ||
+        Array.from({ length: nCols }, function (_, i) { return 'Faixa ' + (i + 1); });
+      return '<div id="' + eid + '" class="setting-editor" data-shape="map">' +
+        '<div class="table-wrap"><table><thead><tr><th>Produto</th>' +
+        cols.map(function (c) { return '<th>' + esc(c) + ' (R$)</th>'; }).join('') +
+        '</tr></thead><tbody>' +
+        nomes.map(function (nome) {
+          return '<tr data-name="' + esc(nome) + '"><td><strong>' + esc(nome) + '</strong></td>' +
+            (v[nome] || []).map(function (n) {
+              return '<td><input type="number" step="any" value="' + n + '"></td>';
+            }).join('') + '</tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }
+
+    // Texto/número simples
+    return '<div id="' + eid + '" class="setting-editor" data-shape="plain">' +
+      '<input value="' + esc(s.valor) + '"></div>';
+  }
+
+  /** Lê o editor e salva no formato que o servidor entende. */
+  function saveSetting(chave, edId) {
+    const ed = document.getElementById(edId);
+    const shape = ed.dataset.shape;
+    let valor;
+
+    if (shape === 'rows') {
+      const keys = ed.dataset.keys.split(',');
+      valor = JSON.stringify(Array.prototype.map.call(ed.querySelectorAll('tbody tr'), function (tr) {
+        const obj = {};
+        keys.forEach(function (k) {
+          obj[k] = parseFloat(tr.querySelector('input[data-k="' + k + '"]').value) || 0;
+        });
+        return obj;
+      }));
+    } else if (shape === 'nums') {
+      valor = JSON.stringify(Array.prototype.map.call(ed.querySelectorAll('input'), function (i) {
+        return parseFloat(i.value) || 0;
+      }));
+    } else if (shape === 'map') {
+      const obj = {};
+      ed.querySelectorAll('tbody tr').forEach(function (tr) {
+        obj[tr.dataset.name] = Array.prototype.map.call(tr.querySelectorAll('input'), function (i) {
+          return parseFloat(i.value) || 0;
+        });
+      });
+      valor = JSON.stringify(obj);
+    } else {
+      valor = ed.querySelector('input').value;
+    }
+
+    api('settings.update', { chave: chave, valor: valor }).then(function () {
       toast('Alterações salvas!'); invalidate();
     }).catch(function (e) { toast(e.message, true); });
   }

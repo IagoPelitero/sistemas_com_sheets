@@ -265,6 +265,16 @@ tr.me td { background: color-mix(in srgb, var(--primary) 10%, transparent); font
 .settings-row { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .settings-row:last-child { border-bottom: none; }
 .settings-row .grow { flex: 1; min-width: 0; }
+.setting-item { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.setting-item:last-child { border-bottom: none; }
+.setting-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.setting-head strong { display: block; font-size: .9rem; }
+.setting-head small { color: var(--ink-2); font-size: .72rem; font-family: monospace; }
+.setting-editor input[type="number"] { max-width: 130px; padding: 8px 10px; }
+.setting-editor table th, .setting-editor table td { padding: 6px 8px; }
+.setting-editor tbody tr:hover td { background: transparent; }
+.setting-editor.nums { display: flex; flex-wrap: wrap; gap: 10px; }
+.num-cell { display: grid; gap: 4px; font-size: .72rem; font-weight: 600; color: var(--ink-2); }
 
 /* Vazio */
 .empty {

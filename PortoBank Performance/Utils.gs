@@ -29,9 +29,13 @@ function ensureSheet_(name) {
   return sheet;
 }
 
-/** Gera um ID único curto. */
+/**
+ * Gera um ID único usando SOMENTE caracteres hexadecimais (0-9, a-f):
+ * 12 dígitos hex aleatórios do UUID + timestamp em hexadecimal.
+ * Ex.: "3fa8c21b9de40197f4a2c8e1"
+ */
 function uid_() {
-  return Utilities.getUuid().slice(0, 8) + Date.now().toString(36);
+  return Utilities.getUuid().replace(/-/g, '').slice(0, 12) + Date.now().toString(16);
 }
 
 /** Data/hora atual em ISO. */
