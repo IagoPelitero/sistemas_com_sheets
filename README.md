@@ -1,182 +1,82 @@
-/**
- * ============================================================
- * PortoBank Performance — Utils.gs
- * ------------------------------------------------------------
- * Funções utilitárias + camada de acesso a dados (DB).
- * TODO acesso à planilha passa por aqui — os demais módulos
- * nunca chamam SpreadsheetApp diretamente para CRUD.
- * ============================================================
- */
+# Sistemas de Gestão de Vendas e Retenção (Google Planilhas)
 
-/** Retorna a planilha ativa (banco de dados). */
-function getDb_() {
-  return SpreadsheetApp.getActiveSpreadsheet();
-}
+Este repositório reúne sistemas prontos para controlar **vendas** e **retenção de clientes** de uma equipe, direto pelo navegador, usando o **Google Planilhas** como "banco de dados". Não é preciso contratar servidor, hospedagem ou instalar nada: tudo roda dentro da conta Google da empresa, de graça, com o Google Apps Script.
 
-/**
- * Garante que a aba exista com os cabeçalhos corretos.
- * @param {string} name Nome da aba (ver SHEETS).
- * @return {GoogleAppsScript.Spreadsheet.Sheet}
- */
-function ensureSheet_(name) {
-  const db = getDb_();
-  let sheet = db.getSheetByName(name);
-  if (!sheet) {
-    sheet = db.insertSheet(name);
-    sheet.getRange(1, 1, 1, HEADERS[name].length).setValues([HEADERS[name]]).setFontWeight('bold');
-    sheet.setFrozenRows(1);
-  }
-  return sheet;
-}
+Este documento foi escrito em linguagem simples, para qualquer pessoa entender o que o sistema faz, mesmo sem experiência técnica.
 
-/** Gera um ID único curto. */
-function uid_() {
-  return Utilities.getUuid().slice(0, 8) + Date.now().toString(36);
-}
+---
 
-/** Data/hora atual em ISO. */
-function nowIso_() {
-  return new Date().toISOString();
-}
+## 1. Para que serve
 
-/**
- * Lê TODAS as linhas de uma aba como objetos — com cache.
- * Esta é a ÚNICA função de leitura em massa do sistema.
- * @param {string} sheetName
- * @return {Object[]} linhas como objetos {header: valor}
- */
-function readAll_(sheetName) {
-  const cached = cacheGet_(sheetName);
-  if (cached) return cached;
+No dia a dia de uma equipe de vendas/atendimento, é comum controlar tudo em planilhas soltas, cadernos ou grupos de mensagens — o que gera erros, retrabalho e falta de visão do time. Este projeto resolve isso oferecendo:
 
-  const sheet = ensureSheet_(sheetName);
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) { cachePut_(sheetName, []); return []; }
+- Uma **tela única** (como um site) onde cada pessoa registra vendas, retenções e acompanha seus números.
+- **Cálculo automático de comissão**, sem depender de planilha manual.
+- **Metas** por pessoa ou por equipe, com acompanhamento do progresso.
+- **Ranking** dos melhores desempenhos do mês.
+- **Relatórios** prontos para baixar (CSV), sem precisar mexer na planilha.
+- **Controle de acesso**: cada pessoa só vê o que pode ver (atendente vê o próprio desempenho; supervisor vê a própria equipe; administrador vê tudo).
+- **Histórico de tudo** (quem fez o quê e quando), para consulta e auditoria.
 
-  const headers = HEADERS[sheetName];
-  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
-  const rows = values.map(function (r) {
-    const obj = {};
-    headers.forEach(function (h, i) { obj[h] = r[i]; });
-    return obj;
-  });
-  cachePut_(sheetName, rows);
-  return rows;
-}
+## 2. O que tem neste repositório
 
-/**
- * Acrescenta uma linha (objeto) a uma aba, com Lock e
- * invalidação de cache.
- * @param {string} sheetName
- * @param {Object} obj
- */
-function appendRow_(sheetName, obj) {
-  withLock_(function () {
-    const sheet = ensureSheet_(sheetName);
-    const row = HEADERS[sheetName].map(function (h) { return obj[h] !== undefined ? obj[h] : ''; });
-    sheet.appendRow(row);
-  });
-  cacheInvalidate_(sheetName);
-}
+O repositório contém mais de um sistema, em pastas separadas. Você pode usar apenas um deles ou todos, dependendo da necessidade:
 
-/**
- * Atualiza a linha cujo campo `id` corresponda.
- * @param {string} sheetName
- * @param {string} id
- * @param {Object} patch Campos a alterar.
- * @return {boolean} true se encontrou e atualizou.
- */
-function updateRowById_(sheetName, id, patch) {
-  let updated = false;
-  withLock_(function () {
-    const sheet = ensureSheet_(sheetName);
-    const headers = HEADERS[sheetName];
-    const idCol = headers.indexOf('id') + 1;
-    const rowIndex = findRowIndexById_(sheet, idCol, id);
-    if (rowIndex === -1) return;
-    const range = sheet.getRange(rowIndex, 1, 1, headers.length);
-    const current = range.getValues()[0];
-    headers.forEach(function (h, i) {
-      if (patch[h] !== undefined) current[i] = patch[h];
-    });
-    range.setValues([current]);
-    updated = true;
-  });
-  if (updated) cacheInvalidate_(sheetName);
-  return updated;
-}
+| Pasta | O que faz |
+|---|---|
+| [sistema_vendas_sheets/](sistema_vendas_sheets) | Sistema focado em **registro de vendas**, comissões, metas e relatórios. |
+| [sistema_retencao_sheets/](sistema_retencao_sheets) | Sistema focado em **registro de retenção de clientes** (evitar cancelamentos), com dashboards e ranking por equipe. |
+| *(pasta adicional)* | Versão mais recente e completa, que junta **vendas + retenção + comissões + metas + relatórios** em um único sistema, com temas visuais e mais opções de configuração. |
 
-/**
- * EXCLUI DEFINITIVAMENTE a linha (deleteRow) — sem soft delete,
- * sem lixo de dados.
- * @param {string} sheetName
- * @param {string} id
- * @return {boolean}
- */
-function deleteRowById_(sheetName, id) {
-  let deleted = false;
-  withLock_(function () {
-    const sheet = ensureSheet_(sheetName);
-    const idCol = HEADERS[sheetName].indexOf('id') + 1;
-    const rowIndex = findRowIndexById_(sheet, idCol, id);
-    if (rowIndex === -1) return;
-    sheet.deleteRow(rowIndex);
-    deleted = true;
-  });
-  if (deleted) cacheInvalidate_(sheetName);
-  return deleted;
-}
+Cada pasta é independente e pode ser publicada separadamente como o seu próprio "site" (aplicativo web) dentro do Google.
 
-/**
- * Localiza o índice (1-based) da linha pelo id usando busca
- * apenas na coluna de id (leitura mínima, sem varrer a planilha).
- */
-function findRowIndexById_(sheet, idCol, id) {
-  const lastRow = sheet.getLastRow();
-  if (lastRow < 2) return -1;
-  const ids = sheet.getRange(2, idCol, lastRow - 1, 1).getValues();
-  for (let i = 0; i < ids.length; i++) {
-    if (String(ids[i][0]) === String(id)) return i + 2;
-  }
-  return -1;
-}
+## 3. Como o sistema funciona, de forma simples
 
-/**
- * Executa uma função com LockService (evita corrida em escrita
- * concorrente — preparado para centenas de usuários).
- */
-function withLock_(fn) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000); // até 20s
-  try { fn(); } finally { lock.releaseLock(); }
-}
+1. A empresa cria uma Planilha Google normal — ela vai guardar todos os dados (vendas, retenções, usuários, metas etc.), como se fossem "tabelas" de um banco de dados.
+2. O código do sistema é colado dentro dessa planilha (usando o recurso gratuito **Apps Script**, do próprio Google).
+3. O Google gera um **link de acesso** (parecido com um site) que pode ser aberto por qualquer pessoa autorizada, direto do navegador, sem instalar nada.
+4. A pessoa faz login com a própria conta Google da empresa — não existe usuário e senha separados para lembrar.
+5. Tudo o que é digitado na tela é salvo automaticamente na planilha, com validações para evitar erro de digitação e duplicidade.
 
-/** Registra evento de auditoria (best-effort, não bloqueia). */
-function audit_(quem, acao, detalhe) {
-  try {
-    appendRow_(SHEETS.AUDIT, {
-      id: uid_(), quando: nowIso_(), quem: quem, acao: acao, detalhe: detalhe || ''
-    });
-  } catch (e) { /* auditoria nunca derruba a operação principal */ }
-}
+## 4. Perfis de acesso (quem pode ver o quê)
 
-/** Normaliza data (Date|string) para 'yyyy-MM-dd'. */
-function toDateKey_(v) {
-  const d = (v instanceof Date) ? v : new Date(v);
-  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-}
+| Perfil | O que consegue fazer |
+|---|---|
+| **Administrador** | Acesso completo: cadastra pessoas, equipes, metas, produtos e comissões; vê tudo; gera qualquer relatório. |
+| **Supervisor** | Vê e gerencia **apenas a própria equipe**: cadastra vendas/retenções do time, ajusta metas do time, acompanha ranking e retira relatórios da equipe. |
+| **Atendente** | Registra as **próprias** vendas/retenções e acompanha o próprio desempenho e ranking (sem ver dados de outras pessoas). |
 
-/** Chave de mês 'yyyy-MM'. */
-function toMonthKey_(v) {
-  return toDateKey_(v).slice(0, 7);
-}
+Regra importante: um supervisor nunca enxerga a equipe de outro supervisor, e um atendente nunca vê os números individuais dos colegas — apenas a própria posição no ranking.
 
-/** Percentual seguro (evita divisão por zero). */
-function pct_(part, total) {
-  return total > 0 ? Math.round((part / total) * 1000) / 10 : 0;
-}
+## 5. Comissões e metas
 
-/** Valida CPF (apenas formato: 11 dígitos). */
-function isValidCpf_(cpf) {
-  return /^\d{11}$/.test(String(cpf).replace(/\D/g, ''));
-}
+- As **regras de comissão** ficam guardadas dentro do próprio sistema e podem ser alteradas pelo administrador a qualquer momento, sem precisar mexer em código.
+- O sistema calcula a comissão de cada pessoa automaticamente, com base nas vendas/retenções lançadas no mês.
+- As **metas** podem ser definidas por pessoa ou por equipe, e o painel mostra o progresso em tempo real (quanto falta para bater a meta).
+
+## 6. Primeiros passos (visão geral, sem termos técnicos)
+
+1. Crie uma Planilha Google nova (ela será o "banco de dados" do sistema).
+2. Abra o menu **Extensões → Apps Script** dentro dessa planilha.
+3. Copie os arquivos da pasta do sistema escolhido para dentro do editor que abrir.
+4. Clique em **Implantar → Novo app da web** e siga as opções sugeridas na tela.
+5. Acesse o link gerado: a primeira pessoa a entrar vira automaticamente **Administrador**.
+
+Depois disso, o administrador pode cadastrar o restante da equipe direto pelo sistema, sem precisar repetir os passos técnicos.
+
+## 7. Segurança e privacidade
+
+- O acesso é sempre pela conta Google da própria empresa — ninguém de fora consegue entrar sem ser cadastrado.
+- Dados sensíveis (como CPF) aparecem parcialmente ocultos nas telas e relatórios.
+- Todas as ações importantes (cadastros, edições, exclusões) ficam registradas em um histórico, para consulta futura.
+
+## 8. Dúvidas frequentes
+
+- **Preciso pagar algo para usar?** Não. O sistema roda com ferramentas gratuitas do Google (Planilhas + Apps Script).
+- **Preciso instalar algum programa?** Não. Tudo funciona pelo navegador.
+- **Posso mudar as regras de comissão depois?** Sim, direto pela tela de configurações, sem precisar de suporte técnico.
+- **Os dados ficam salvos onde?** Na própria Planilha Google criada pela empresa — ela continua sendo dona de todos os dados.
+
+---
+
+Licença: MIT (uso livre, veja o arquivo de licença de cada pasta).
