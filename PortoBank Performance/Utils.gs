@@ -152,7 +152,7 @@ function findRowIndexById_(sheet, idCol, id) {
 function withLock_(fn) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000); // até 20s
-  try { fn(); } finally { lock.releaseLock(); }
+  try { return fn(); } finally { lock.releaseLock(); }
 }
 
 /** Registra evento de auditoria (best-effort, não bloqueia). */

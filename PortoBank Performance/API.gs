@@ -84,6 +84,19 @@ function api(action, payload) {
         data = readAll_(SHEETS.SETTINGS);
         break;
       case 'settings.update': data = settingsUpdate_(me, payload.chave, payload.valor); break;
+
+      // ---- Auto-refresh (ultraleve: só lê o CacheService) ----
+      case 'version': data = { stamp: cacheStamp_() }; break;
+
+      // ---- Auditoria (SOMENTE ADMIN) ----
+      case 'audit.status':
+        if (!isAdmin_(me)) throw new Error('Somente o ADMIN pode consultar a auditoria.');
+        data = auditStatus_();
+        break;
+      case 'audit.rotate':
+        if (!isAdmin_(me)) throw new Error('Somente o ADMIN pode arquivar a auditoria.');
+        data = auditRotateNow_();
+        break;
       case 'products.save': data = productsSave_(me, payload); break;
       case 'products.delete': data = productsDelete_(me, payload.id); break;
       case 'teams.save': data = teamsSave_(me, payload); break;
