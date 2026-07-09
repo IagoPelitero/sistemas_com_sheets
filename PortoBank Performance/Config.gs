@@ -90,21 +90,15 @@ const RETENTION_PRODUCTS = {
   'Cartão de Crédito': ['Retido', 'Cancelado', 'Retido por Argumentação'],
   'Conta Digital': ['Retido', 'Cancelado'],
   'Cashback': ['Cashback', 'Milhas'],
-  'Massificado - Perda e Roubo': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
-  'Massificado - Identidade Protegida': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
-  'Massificado - Vida': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
-  'Massificado - Martelinho': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
-  'Massificado - RE': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado']
+  'Massificado': ['Retido', 'Cancelado']
 };
-
-/** Prefixo que identifica retenção de massificados. */
-const MASSIFICADO_PREFIX = 'Massificado';
 
 /**
  * SEED de configurações de comissão.
- * Regras de Cartão de Crédito (FONE) seguem a especificação do sistema.
- * Demais regras seguem o PDF oficial "Programa de Remuneração
- * Variável" (vigência 01/01/2026) — tudo editável em Configurações.
+ * Regras de Cartão de Crédito seguem exatamente a especificação.
+ * Comissões globais (Conta Digital, Retenção Massificados,
+ * Milhas→Cashback, Venda Massificados) usam valores padrão
+ * EDITÁVEIS em Configurações — ajustar conforme o PDF oficial.
  */
 const DEFAULT_SETTINGS = {
   // ---- Cartão de Crédito (FONE): faixas de % retidos → R$ ----
@@ -125,95 +119,31 @@ const DEFAULT_SETTINGS = {
     { retidos: 78, argumentacao: 44, valor: 200 }
   ]),
   // ---- Cartão de Crédito (DIGITAL): pontos ----
-  // PDF 6.3.2: Argumentação R$1,50/retido (1,5 pt) e Incentivo
-  // Financeiro R$0,50/retido (0,5 pt) → valor do ponto = R$1,00.
   'comissao.cartaoDigital.pontoIncentivo': '0.5',
   'comissao.cartaoDigital.pontoArgumentacao': '1.5',
-  'comissao.cartaoDigital.valorPonto': '1',
-  // ---- Cashback (PDF 6.3.2): prêmio fixo por faixa de conversão ----
-  'comissao.cashback.faixas': JSON.stringify([
-    { pct: 36, valor: 50 },
-    { pct: 39, valor: 70 },
-    { pct: 42, valor: 100 },
-    { pct: 45, valor: 130 }
-  ]),
-  // ---- Teto do bloco de retenção (PDF 6.4): argumentação +
-  //      incentivo + cashback somados não passam de R$530 ----
-  'comissao.retencao.teto': '530',
-  // ---- Conta Digital (PDF 6.6): prêmio fixo por % de retenção ----
-  'comissao.contaDigital.faixas': JSON.stringify([
-    { pct: 30, valor: 100 },
-    { pct: 50, valor: 150 },
-    { pct: 75, valor: 200 }
-  ]),
-  'comissao.contaDigital.bonus': JSON.stringify([
-    { pct: 76, valor: 100 },
-    { pct: 78, valor: 150 }
-  ]),
-  // ---- Vendas coletivas (PDF 6.3.1): R$/venda por faixa de
-  //      atingimento da meta coletiva do mês.
-  //      Faixas: [até 60% | 60–79,99% | 80–100% | acima de 100%]
-  //      Sem teto de pagamento. ----
-  'comissao.vendas.tabela': JSON.stringify({
-    'Seguro Perda e Roubo':   [2.00, 2.50, 3.00, 4.00],
-    'Adicional':              [1.00, 1.50, 2.00, 3.00],
-    'Seguro Vida':            [1.00, 1.50, 2.00, 3.00],
-    'Identidade Protegida':   [1.00, 1.50, 2.00, 3.00],
-    'Seguro RE':              [1.00, 1.50, 2.00, 3.00],
-    'Martelinho de Ouro':     [3.00, 3.50, 4.00, 5.00],
-    'Guincho':                [3.00, 3.50, 4.00, 5.00],
-    'Quitação fatura':        [2.00, 2.50, 3.00, 4.00]
-  }),
-  // % de atingimento da meta coletiva do mês (o ADMIN atualiza
-  // mensalmente conforme divulgação da operação; define a faixa).
-  'comissao.vendas.atingimentoColetivo': '80',
-  // ---- Retenção de Massificados (PDF 6.5): R$/retido por faixa
-  //      de conversão, separado por Argumentação e Incentivo ----
-  'comissao.massificados.faixasArg': JSON.stringify([15, 30, 50, 60]),
-  'comissao.massificados.faixasInc': JSON.stringify([60, 65, 70, 75]),
-  'comissao.massificados.arg': JSON.stringify({
-    'Perda e Roubo':        [1.50, 2.00, 2.50, 3.00],
-    'Identidade Protegida': [1.50, 2.00, 2.50, 3.00],
-    'Vida':                 [1.50, 2.00, 2.50, 3.00],
-    'Martelinho':           [1.00, 1.50, 2.00, 2.50],
-    'RE':                   [1.00, 1.50, 2.00, 2.50]
-  }),
-  'comissao.massificados.inc': JSON.stringify({
-    'Perda e Roubo':        [1.00, 1.25, 1.50, 2.00],
-    'Identidade Protegida': [1.00, 1.25, 1.50, 2.00],
-    'Vida':                 [1.00, 1.25, 1.50, 2.00],
-    'RE':                   [1.00, 1.10, 1.25, 1.50],
-    'Martelinho':           [1.00, 1.10, 1.20, 1.30]
-  }),
+  'comissao.cartaoDigital.valorPonto': '10', // R$ por ponto — editável (ajustar conforme PDF)
+  // ---- Comissões globais (valores padrão — ajustar conforme PDF) ----
+  'comissao.global.contaDigital': '5',        // R$ por retenção de Conta Digital
+  'comissao.global.retencaoMassificados': '8',// R$ por massificado retido
+  'comissao.global.conversaoMilhasCashback': '3', // R$ por conversão Milhas → Cashback
+  'comissao.global.vendaMassificados': '12',  // R$ por venda de massificado
   // ---- Metas padrão ----
   'meta.padrao.vendas': '50',
   'meta.padrao.comissao': '1500',
   'meta.padrao.retencao': '75',
   // ---- Sistema ----
   'sistema.nome': 'PortoBank Performance',
-  'sistema.versao': '1.2.0'
+  'sistema.versao': '1.0.0'
 };
 
-/**
- * Produtos padrão (seed) — mix do PDF 6.3.1 + indicadores 
- * de valor fixo (CPCP e Upgrades).
- * Produtos da tabela de vendas coletivas têm o valor resolvido
- * pela faixa de atingimento; indicadores usam comissaoUnitaria.
- */
+/** Produtos massificados padrão (seed). */
 const DEFAULT_PRODUCTS = [
-  { nome: 'Seguro Perda e Roubo', categoria: 'Massificado' },
-  { nome: 'Adicional', categoria: 'Massificado' },
-  { nome: 'Seguro Vida', categoria: 'Massificado' },
-  { nome: 'Identidade Protegida', categoria: 'Massificado' },
-  { nome: 'Seguro RE', categoria: 'Massificado' },
-  { nome: 'Martelinho de Ouro', categoria: 'Massificado' },
-  { nome: 'Guincho', categoria: 'Massificado' },
-  { nome: 'Quitação fatura', categoria: 'Massificado' },
-  // Indicadores de valor fixo (PDF):
-  // CPCP pago somente com proposta formalizada após contato + envio do link.
-  { nome: 'CPCP', categoria: 'Indicador', comissaoUnitaria: 30 },
-  { nome: 'Upgrade Platinum', categoria: 'Indicador', comissaoUnitaria: 2 },
-  { nome: 'Upgrade Black/Infinite', categoria: 'Indicador', comissaoUnitaria: 4 }
+  { nome: 'Residencial', categoria: 'Massificado' },
+  { nome: 'Auto Leve', categoria: 'Massificado' },
+  { nome: 'Vida', categoria: 'Massificado' },
+  { nome: 'Pet', categoria: 'Massificado' },
+  { nome: 'Odonto', categoria: 'Massificado' },
+  { nome: 'Cartão Protegido', categoria: 'Massificado' }
 ];
 
 /** Temas disponíveis. */

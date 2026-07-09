@@ -21,17 +21,17 @@ const App = (function () {
   };
 
   const PAGES = {
-    dashboard:     { title: 'Dashboard',        ico: 'space_dashboard' },
-    novaVenda:     { title: 'Nova Venda',       ico: 'add_shopping_cart' },
-    novaRetencao:  { title: 'Nova Retenção',    ico: 'handshake' },
-    equipe:        { title: 'Equipe',           ico: 'groups' },
-    ranking:       { title: 'Ranking',          ico: 'emoji_events' },
-    gestao:        { title: 'Gestão da Equipe', ico: 'manage_accounts' },
-    relatorios:    { title: 'Relatórios',       ico: 'description' },
-    cadastro:      { title: 'Cadastro',         ico: 'person_add' },
-    configuracoes: { title: 'Configurações',    ico: 'settings' }
+    dashboard:     { title: 'Dashboard',        ico: '📊' },
+    novaVenda:     { title: 'Nova Venda',       ico: '🛒' },
+    novaRetencao:  { title: 'Nova Retenção',    ico: '🛡️' },
+    equipe:        { title: 'Equipe',           ico: '👥' },
+    ranking:       { title: 'Ranking',          ico: '🏆' },
+    gestao:        { title: 'Gestão da Equipe', ico: '🧭' },
+    relatorios:    { title: 'Relatórios',       ico: '📄' },
+    cadastro:      { title: 'Cadastro',         ico: '➕' },
+    configuracoes: { title: 'Configurações',    ico: '⚙️' }
   };
-  const THEMES_UI = ['portobank', 'rosa', 'brasil', 'dark'];
+  const THEME_COLORS = { portobank: '#0B2440', rosa: '#D6336C', brasil: '#009739', dark: '#10151C' };
   const BRL = function (v) { return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); };
 
   // ------------------ API ------------------
@@ -65,7 +65,7 @@ const App = (function () {
   function toast(msg, isError) {
     const el = document.createElement('div');
     el.className = 'toast' + (isError ? ' error' : '');
-    el.innerHTML = '<span class="material-icons-round t-ico" aria-hidden="true">' + (isError ? 'error' : 'check_circle') + '</span><span>' + esc(msg) + '</span>';
+    el.innerHTML = '<span class="t-ico">' + (isError ? '⚠️' : '✅') + '</span><span>' + esc(msg) + '</span>';
     document.getElementById('toasts').appendChild(el);
     setTimeout(function () { el.classList.add('out'); setTimeout(function () { el.remove(); }, 260); }, 3200);
   }
@@ -103,35 +103,22 @@ const App = (function () {
     // Navegação conforme permissões
     const nav = document.getElementById('nav');
     nav.innerHTML = s.permissions.pages.map(function (p) {
-      return '<button class="nav-item" data-page="' + p + '">' +
-        '<span class="material-icons-round ico" aria-hidden="true">' + PAGES[p].ico + '</span>' +
-        '<span class="menu-label">' + PAGES[p].title + '</span></button>';
+      return '<button class="nav-item" data-page="' + p + '"><span class="ico">' + PAGES[p].ico + '</span>' + PAGES[p].title + '</button>';
     }).join('');
     nav.addEventListener('click', function (ev) {
       const btn = ev.target.closest('.nav-item');
       if (btn) { go(btn.dataset.page); document.getElementById('sidebar').classList.remove('open'); }
     });
 
-    // Usuário: sempre o NOME (nunca o e-mail) + cargo + contexto:
-    //  - Atendente  → Supervisão: <nome do supervisor da equipe>
-    //  - Supervisor → Equipe: <nome da equipe>
-    //  - ADMIN      → Supervisão, se houver equipe/supervisor cadastrado
+    // Usuário
     document.getElementById('userName').textContent = s.user.nome;
     document.getElementById('userRole').textContent = s.user.cargo;
     document.getElementById('userAvatar').textContent = s.user.nome.slice(0, 2).toUpperCase();
-    const extra = document.getElementById('userExtra');
-    if (s.permissions.scope === 'self') {
-      extra.textContent = 'Supervisão: ' + (s.supervisao || '—');
-    } else if (s.permissions.scope === 'team') {
-      extra.textContent = 'Equipe: ' + (s.user.equipe || '—');
-    } else {
-      extra.textContent = s.supervisao ? 'Supervisão: ' + s.supervisao : '';
-    }
 
     // Temas
     const row = document.getElementById('themeRow');
-    row.innerHTML = THEMES_UI.map(function (t) {
-      return '<button class="theme-dot" data-t="' + t + '" title="Tema ' + t + '" aria-label="Tema ' + t + '"></button>';
+    row.innerHTML = Object.keys(THEME_COLORS).map(function (t) {
+      return '<button class="theme-dot" data-t="' + t + '" style="background:' + THEME_COLORS[t] + '" title="' + t + '" aria-label="Tema ' + t + '"></button>';
     }).join('');
     row.addEventListener('click', function (ev) {
       const b = ev.target.closest('.theme-dot');
@@ -150,27 +137,6 @@ const App = (function () {
     document.getElementById('menuBtn').addEventListener('click', function () {
       document.getElementById('sidebar').classList.toggle('open');
     });
-
-    // Auto-refresh do dashboard
-    pollSchedule();
-
-    // Sidebar recolhível (desktop)
-    document.getElementById('collapseBtn').addEventListener('click', function () {
-      document.getElementById('sidebar').classList.toggle('collapsed');
-    });
-
-    // Ações rápidas conforme permissões
-    const pages = s.permissions.pages;
-    const qv = document.getElementById('quickVenda');
-    const qr = document.getElementById('quickRet');
-    if (pages.indexOf('novaVenda') !== -1) {
-      qv.classList.remove('hidden');
-      qv.addEventListener('click', function () { go('novaVenda'); });
-    }
-    if (pages.indexOf('novaRetencao') !== -1) {
-      qr.classList.remove('hidden');
-      qr.addEventListener('click', function () { go('novaRetencao'); });
-    }
   }
 
   function applyTheme(t, silent) {
@@ -182,48 +148,6 @@ const App = (function () {
       api('users.theme', { tema: t }).then(function () { toast('Tema salvo!'); }).catch(function (e) { toast(e.message, true); });
     }
   }
-
-  // ------------------ Auto-refresh (com travas) ------------------
-  // Mantém o dashboard atualizado sem prejudicar o sistema:
-  //  - Endpoint 'version' só lê o CacheService (não toca o Sheets);
-  //  - Pausa com aba em segundo plano, fora do dashboard ou com modal aberto;
-  //  - Nunca sobrepõe chamadas (pula o ciclo se a anterior não voltou);
-  //  - Circuit breaker: resposta lenta/erro dobra o intervalo (60s→…→8min)
-  //    e volta ao normal quando estabiliza;
-  //  - Jitter aleatório evita que todos os clientes disparem juntos.
-  const poll = { timer: null, base: 60000, interval: 60000, max: 480000, inflight: false, stamp: null };
-
-  function pollSchedule() {
-    clearTimeout(poll.timer);
-    poll.timer = setTimeout(pollTick, poll.interval + Math.random() * 8000);
-  }
-
-  function pollTick() {
-    const modalOpen = !document.getElementById('modalBackdrop').classList.contains('hidden');
-    if (document.hidden || state.page !== 'dashboard' || modalOpen || poll.inflight) { pollSchedule(); return; }
-    poll.inflight = true;
-    const t0 = Date.now();
-    api('version', {}).then(function (v) {
-      poll.inflight = false;
-      poll.interval = (Date.now() - t0 > 5000)
-        ? Math.min(poll.interval * 2, poll.max)   // lento → desacelera
-        : poll.base;                              // saudável → normaliza
-      if (poll.stamp && v.stamp !== poll.stamp) { // houve escrita em algum dado
-        invalidate();
-        go('dashboard');
-      }
-      poll.stamp = v.stamp;
-      pollSchedule();
-    }).catch(function () {
-      poll.inflight = false;
-      poll.interval = Math.min(poll.interval * 2, poll.max); // erro → desacelera
-      pollSchedule();
-    });
-  }
-
-  document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) pollSchedule(); // volta ao 1º plano → retoma
-  });
 
   // ------------------ Router ------------------
   function go(page) {
@@ -296,37 +220,42 @@ const App = (function () {
         let html = '';
 
         // Cards superiores
-        if (!hasRet) {
-          // Perfis somente vendas: vendas + comissão + progresso
-          html += '<div class="grid kpis">';
-          html += kpi('Vendas', d.cards.vendas, 'Meta: ' + d.cards.metaVendas + ' · Restam ' + d.cards.restanteVendas);
-          html += kpi('Comissão', BRL(d.cards.comissao), 'Meta: ' + BRL(d.cards.metaComissao), 'ok');
-          html += kpi('Progresso da meta', d.cards.progressoComissao + '%', progressBar(d.cards.progressoComissao),
-            d.cards.progressoComissao >= 100 ? 'ok' : d.cards.progressoComissao >= 60 ? '' : 'warn');
-          html += '</div>';
-        } else {
-          // Perfis com retenção: layout enxuto —
-          // quantidade de vendas + %s de retenção (cartão, conta e
-          // cashback), e ao final UM bloco de comissão com progresso.
+        html += '<div class="grid kpis">';
+        html += kpi('Vendas', d.cards.vendas, 'Meta: ' + d.cards.metaVendas + ' · Restam ' + d.cards.restanteVendas);
+        html += kpi('Comissão', BRL(d.cards.comissao), 'Meta: ' + BRL(d.cards.metaComissao), 'ok');
+        html += kpi('Progresso da meta', d.cards.progressoComissao + '%', progressBar(d.cards.progressoComissao),
+          d.cards.progressoComissao >= 100 ? 'ok' : d.cards.progressoComissao >= 60 ? '' : 'warn');
+        html += kpi('Restante (R$)', BRL(d.cards.restanteComissao), 'para bater a meta', 'warn');
+        html += '</div>';
+
+        // Blocos de retenção (apenas perfis com retenção)
+        if (hasRet) {
           const r = d.retencao;
-          html += '<div class="grid kpis">';
-          html += kpi('Vendas', d.cards.vendas, 'Meta: ' + d.cards.metaVendas + ' · Restam ' + d.cards.restanteVendas);
-          html += kpi('% Retenção Cartão', r.cartao.pctRetidos + '%',
-            r.cartao.retidos + ' de ' + r.cartao.atendidos + ' · Arg. ' + r.cartao.pctArgumentacao + '%', 'ok');
-          html += kpi('% Retenção Conta', r.conta.pctRetidos + '%',
-            r.conta.retidos + ' de ' + r.conta.atendidos + ' atendidos', 'ok');
-          html += kpi('% Cashback', r.cashback.pctCashback + '%',
-            r.cashback.cashback + ' de ' + r.cashback.atendidos + ' · Milhas ' + r.cashback.pctMilhas + '%', 'ok');
+          html += '<h2 class="section-title">Retenção — Cartão de Crédito</h2><div class="grid kpis">';
+          html += kpi('% Retidos', r.cartao.pctRetidos + '%', r.cartao.retidos + ' de ' + r.cartao.atendidos + ' atendidos', 'ok');
+          html += kpi('% Argumentação', r.cartao.pctArgumentacao + '%', r.cartao.argumentados + ' argumentados');
+          html += kpi('% Cancelados', r.cartao.pctCancelados + '%', r.cartao.cancelados + ' cancelados', 'bad');
+          html += kpi('Atendidos', r.cartao.atendidos, 'no mês');
           html += '</div>';
 
-          // Bloco final: comissão total estipulada + barra de progresso
-          html += '<div class="card" style="margin-top:16px">' +
-            '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px">' +
-            '<h3 style="margin:0">Comissão do mês</h3>' +
-            '<span class="muted">Vendas ' + BRL(d.comissao.totalVendas) + ' · Retenção ' + BRL(d.comissao.totalRetencao) + '</span></div>' +
-            '<div class="kpi-value" style="margin-top:6px">' + BRL(d.comissao.total) +
-            ' <span class="kpi-sub">de ' + BRL(d.cards.metaComissao) + ' estipulados (' + d.cards.progressoComissao + '%)</span></div>' +
-            progressBar(d.cards.progressoComissao) + '</div>';
+          html += '<h2 class="section-title">Retenção — Conta Digital</h2><div class="grid kpis">';
+          html += kpi('% Retidos', r.conta.pctRetidos + '%', r.conta.retidos + ' retidos', 'ok');
+          html += kpi('% Cancelados', r.conta.pctCancelados + '%', r.conta.cancelados + ' cancelados', 'bad');
+          html += kpi('Atendidos', r.conta.atendidos, 'no mês');
+          html += '</div>';
+
+          html += '<h2 class="section-title">Cashback</h2><div class="grid kpis">';
+          html += kpi('% Cashback', r.cashback.pctCashback + '%', r.cashback.cashback + ' conversões', 'ok');
+          html += kpi('% Milhas', r.cashback.pctMilhas + '%', r.cashback.milhas + ' em milhas');
+          html += kpi('Atendidos', r.cashback.atendidos, 'no mês');
+          html += '</div>';
+
+          html += '<h2 class="section-title">Comissão (Vendas + Retenção)</h2><div class="grid kpis">';
+          html += kpi('Vendas', BRL(d.comissao.totalVendas));
+          html += kpi('Retenção', BRL(d.comissao.totalRetencao));
+          html += kpi('Total atual', BRL(d.comissao.total), 'Meta: ' + BRL(d.cards.metaComissao), 'ok');
+          html += kpi('Progresso', d.cards.progressoComissao + '%', progressBar(d.cards.progressoComissao));
+          html += '</div>';
         }
 
         // Gráfico de evolução diária
@@ -347,9 +276,8 @@ const App = (function () {
         if (hasRet) {
           html += '<div class="grid two" style="margin-top:16px">';
           html += '<div class="card"><h3>Massificados retidos</h3>' +
-            table(['Data', 'CPF', 'Produto', 'Tipo'], d.massificadosRetidos.map(function (m) {
-              return '<tr><td>' + esc(m.data) + '</td><td>' + esc(m.cpf) + '</td><td>' + esc(m.produto) +
-                '</td><td><span class="badge ok">' + esc(m.resultado) + '</span></td></tr>';
+            table(['Data', 'CPF', 'OBS'], d.massificadosRetidos.map(function (m) {
+              return '<tr><td>' + esc(m.data) + '</td><td>' + esc(m.cpf) + '</td><td>' + esc(m.obs) + '</td></tr>';
             })) + '</div>';
           html += '<div class="card"><h3>Retenção dia a dia</h3>' +
             table(['Dia', 'Quantidade', '% Retenção'], d.tabelaDiaria.map(function (t) {
@@ -371,14 +299,14 @@ const App = (function () {
 
     /* ---------- NOVA VENDA ---------- */
     novaVenda: function (el) {
-      const prods = state.session.products.filter(function (p) { return String(p.ativo) !== 'Não'; });
+      const prods = state.session.products.filter(function (p) { return p.categoria === 'Massificado'; });
       el.innerHTML =
         '<div class="card" style="max-width:640px">' +
-        '<h3>Registrar venda</h3>' +
+        '<h3>Registrar venda de massificado</h3>' +
         '<form id="fVenda"><div class="form-grid">' +
         '<div><label>Data *</label><input type="date" name="data" required value="' + new Date().toISOString().slice(0, 10) + '"></div>' +
         '<div><label>CPF *</label><input name="cpf" required inputmode="numeric" maxlength="14" placeholder="000.000.000-00"></div>' +
-        '<div><label>Produto *</label><select name="produto" required>' +
+        '<div><label>Produto (Massificado) *</label><select name="produto" required>' +
         prods.map(function (p) { return '<option>' + esc(p.nome) + '</option>'; }).join('') + '</select></div>' +
         '<div><label>Quantidade *</label><input type="number" name="quantidade" min="1" value="1" required></div>' +
         '<div class="full"><label>Observação (opcional)</label><textarea name="obs" rows="2"></textarea></div>' +
@@ -534,42 +462,23 @@ const App = (function () {
         const settings = res[0]; state.session = res[1];
         const prods = state.session.products;
         let html = '<div class="card"><h3>Parâmetros e comissões</h3>' +
-          '<p class="muted">Regras de comissão, metas padrão e parâmetros — tudo editável aqui, sem abrir o Sheets.</p>';
+          '<p class="muted">Regras de comissão, metas padrão e parâmetros — tudo editável aqui, sem abrir o Sheets. Valores marcados com "ajustar conforme PDF" usam padrões provisórios.</p>';
         settings.filter(function (s) { return String(s.chave).indexOf('sistema.') !== 0; }).forEach(function (s) {
-          const eid = 'set_' + btoa(s.chave).replace(/[^a-zA-Z0-9]/g, '');
-          html += '<div class="setting-item">' +
-            '<div class="setting-head"><div><strong>' + esc(s.descricao || s.chave) + '</strong><small>' + esc(s.chave) + '</small></div>' +
-            '<button class="btn small" onclick="App.saveSetting(\'' + esc(s.chave) + '\',\'' + eid + '\')">Salvar</button></div>' +
-            settingEditor(s, eid) + '</div>';
+          html += '<div class="settings-row"><div><strong>' + esc(s.chave) + '</strong><small>' + esc(s.descricao) + '</small></div>' +
+            '<input id="set_' + btoa(s.chave).replace(/=/g, '') + '" value="' + esc(s.valor) + '">' +
+            '<button class="btn small" onclick="App.saveSetting(\'' + esc(s.chave) + '\',\'set_' + btoa(s.chave).replace(/=/g, '') + '\')">Salvar</button></div>';
         });
         html += '</div>';
 
         html += '<div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center">' +
-          '<h3 style="margin:0">Produtos de venda</h3><button class="btn small" onclick="App.productForm()">+ Novo produto</button></div>' +
+          '<h3 style="margin:0">Produtos (massificados)</h3><button class="btn small" onclick="App.productForm()">+ Novo produto</button></div>' +
           table(['Produto', 'Comissão unitária', 'Ativo', 'Ações'], prods.map(function (p) {
             return '<tr><td><strong>' + esc(p.nome) + '</strong></td><td>' + BRL(parseFloat(p.comissaoUnitaria)) + '</td>' +
               '<td><span class="badge ' + (p.ativo === 'Sim' ? 'ok' : 'neutral') + '">' + esc(p.ativo) + '</span></td>' +
               '<td><button class="btn small ghost" onclick=\'App.productForm(' + JSON.stringify(p) + ')\'>✏️</button> ' +
               '<button class="btn small danger" onclick="App.productDelete(\'' + p.id + '\')">🗑</button></td></tr>';
           })) + '</div>';
-
-        // Auditoria: arquivamento em nova planilha a cada 30 dias
-        html += '<div class="card" style="margin-top:16px">' +
-          '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px">' +
-          '<div><h3 style="margin:0">Auditoria</h3>' +
-          '<p class="muted" id="auditInfo" style="margin-top:4px">Carregando situação…</p></div>' +
-          '<button class="btn small ghost" onclick="App.auditRotate()">Arquivar agora</button></div>' +
-          '<p class="muted" style="margin-top:8px">Os registros com mais de 30 dias são movidos para uma nova planilha ' +
-          '(nada é perdido) e a principal fica leve. Para o arquivamento automático, execute uma única vez a função ' +
-          '<span class="mono">auditRotationInstall()</span> no editor do Apps Script.</p></div>';
-
         el.innerHTML = html;
-        api('audit.status', {}).then(function (a) {
-          const u = a.ultimaRotacao;
-          document.getElementById('auditInfo').innerHTML =
-            a.linhasAtuais + ' registro(s) na planilha principal · mantidos ' + a.manterDias + ' dias' +
-            (u ? ' · último arquivo: <a href="' + esc(u.url) + '" target="_blank" rel="noopener">' + esc(u.nome) + '</a>' : ' · nenhum arquivamento ainda');
-        }).catch(function () { document.getElementById('auditInfo').textContent = ''; });
       }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
     }
   };
@@ -702,117 +611,11 @@ const App = (function () {
   }
 
   /** Salvar configuração individual (ADMIN). */
-  // ---- Editor amigável de parâmetros (nunca exibe JSON cru) ----
-  // Rótulos das colunas para regras em formato de lista de faixas.
-  const SETTING_LABELS = {
-    pct: '% a partir de', valor: 'Prêmio (R$)', min: '% mín.', max: '% máx.',
-    retidos: '% retidos', argumentacao: '% argumentação'
-  };
-  // Cabeçalhos das tabelas produto × faixa (R$ por venda/retido).
-  const SETTING_COLS = {
-    'comissao.vendas.tabela': ['Até 60%', '60–79,99%', '80–100%', 'Acima de 100%'],
-    'comissao.massificados.arg': ['Conv. 15%', 'Conv. 30%', 'Conv. 50%', 'Conv. 60%'],
-    'comissao.massificados.inc': ['Conv. 60%', 'Conv. 65%', 'Conv. 70%', 'Conv. 75%']
-  };
-
-  /** Detecta o formato do valor e devolve o editor adequado. */
-  function settingEditor(s, eid) {
-    let v = null;
-    try { v = JSON.parse(s.valor); } catch (e) { /* texto/número simples */ }
-
-    // Lista de faixas: [{pct, valor}, ...] e variações
-    if (Array.isArray(v) && v.length && typeof v[0] === 'object') {
-      const keys = Object.keys(v[0]);
-      return '<div id="' + eid + '" class="setting-editor" data-shape="rows" data-keys="' + keys.join(',') + '">' +
-        '<div class="table-wrap"><table><thead><tr>' +
-        keys.map(function (k) { return '<th>' + esc(SETTING_LABELS[k] || k) + '</th>'; }).join('') +
-        '</tr></thead><tbody>' +
-        v.map(function (row) {
-          return '<tr>' + keys.map(function (k) {
-            return '<td><input type="number" step="any" data-k="' + k + '" value="' + esc(row[k]) + '"></td>';
-          }).join('') + '</tr>';
-        }).join('') + '</tbody></table></div></div>';
-    }
-
-    // Lista de números: faixas de conversão [15, 30, 50, 60]
-    if (Array.isArray(v) && v.every(function (n) { return typeof n === 'number'; })) {
-      return '<div id="' + eid + '" class="setting-editor nums" data-shape="nums">' +
-        v.map(function (n, i) {
-          return '<label class="num-cell">Faixa ' + (i + 1) + ' (%)' +
-            '<input type="number" step="any" value="' + n + '"></label>';
-        }).join('') + '</div>';
-    }
-
-    // Mapa produto → valores por faixa: {"Guincho": [3, 3.5, 4, 5], ...}
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
-      const nomes = Object.keys(v);
-      const nCols = (v[nomes[0]] || []).length;
-      const cols = SETTING_COLS[s.chave] ||
-        Array.from({ length: nCols }, function (_, i) { return 'Faixa ' + (i + 1); });
-      return '<div id="' + eid + '" class="setting-editor" data-shape="map">' +
-        '<div class="table-wrap"><table><thead><tr><th>Produto</th>' +
-        cols.map(function (c) { return '<th>' + esc(c) + ' (R$)</th>'; }).join('') +
-        '</tr></thead><tbody>' +
-        nomes.map(function (nome) {
-          return '<tr data-name="' + esc(nome) + '"><td><strong>' + esc(nome) + '</strong></td>' +
-            (v[nome] || []).map(function (n) {
-              return '<td><input type="number" step="any" value="' + n + '"></td>';
-            }).join('') + '</tr>';
-        }).join('') + '</tbody></table></div></div>';
-    }
-
-    // Texto/número simples
-    return '<div id="' + eid + '" class="setting-editor" data-shape="plain">' +
-      '<input value="' + esc(s.valor) + '"></div>';
-  }
-
-  /** Lê o editor e salva no formato que o servidor entende. */
-  function saveSetting(chave, edId) {
-    const ed = document.getElementById(edId);
-    const shape = ed.dataset.shape;
-    let valor;
-
-    if (shape === 'rows') {
-      const keys = ed.dataset.keys.split(',');
-      valor = JSON.stringify(Array.prototype.map.call(ed.querySelectorAll('tbody tr'), function (tr) {
-        const obj = {};
-        keys.forEach(function (k) {
-          obj[k] = parseFloat(tr.querySelector('input[data-k="' + k + '"]').value) || 0;
-        });
-        return obj;
-      }));
-    } else if (shape === 'nums') {
-      valor = JSON.stringify(Array.prototype.map.call(ed.querySelectorAll('input'), function (i) {
-        return parseFloat(i.value) || 0;
-      }));
-    } else if (shape === 'map') {
-      const obj = {};
-      ed.querySelectorAll('tbody tr').forEach(function (tr) {
-        obj[tr.dataset.name] = Array.prototype.map.call(tr.querySelectorAll('input'), function (i) {
-          return parseFloat(i.value) || 0;
-        });
-      });
-      valor = JSON.stringify(obj);
-    } else {
-      valor = ed.querySelector('input').value;
-    }
-
-    api('settings.update', { chave: chave, valor: valor }).then(function () {
+  function saveSetting(chave, inputId) {
+    api('settings.update', { chave: chave, valor: document.getElementById(inputId).value }).then(function () {
       toast('Alterações salvas!'); invalidate();
     }).catch(function (e) { toast(e.message, true); });
   }
-
-  /** Arquiva a auditoria agora (ADMIN). */
-  function auditRotate() {
-    api('audit.rotate', {}).then(function (r) {
-      if (!r.linhas) { toast('Nada a arquivar: não há registros com mais de 30 dias.'); return; }
-      openModal('Auditoria arquivada',
-        '<p><strong>' + r.linhas + '</strong> registro(s) movidos para a nova planilha:</p>' +
-        '<p style="margin-top:8px"><a class="btn small ghost" href="' + esc(r.url) + '" target="_blank" rel="noopener">Abrir ' + esc(r.nome) + '</a></p>');
-      invalidate(); go('configuracoes');
-    }).catch(function (e) { toast(e.message, true); });
-  }
-
 
   /** Modal de produto (ADMIN). */
   function productForm(p) {
@@ -871,7 +674,7 @@ const App = (function () {
   return {
     closeModal: closeModal, userForm: userForm, userDelete: userDelete,
     userIndicators: userIndicators, goalForm: goalForm, report: report,
-    saveSetting: saveSetting, auditRotate: auditRotate, productForm: productForm, productDelete: productDelete,
+    saveSetting: saveSetting, productForm: productForm, productDelete: productDelete,
     teamForm: teamForm, teamDelete: teamDelete
   };
 })();

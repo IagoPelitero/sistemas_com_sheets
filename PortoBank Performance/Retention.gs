@@ -4,13 +4,10 @@
  * ------------------------------------------------------------
  * Registro e consulta de retenções.
  * Produtos e resultados válidos (ver RETENTION_PRODUCTS):
- *   Cartão de Crédito     → Retido | Cancelado | Retido por Argumentação
- *   Conta Digital         → Retido | Cancelado
- *   Cashback              → Cashback | Milhas
- *   Massificado - <prod>  → Retido por Argumentação | Retido por
- *                           Incentivo | Cancelado
- *   (produtos: Perda e Roubo, Identidade Protegida, Vida,
- *    Martelinho, RE — conforme PDF 6.5)
+ *   Cartão de Crédito → Retido | Cancelado | Retido por Argumentação
+ *   Conta Digital     → Retido | Cancelado
+ *   Cashback          → Cashback | Milhas
+ *   Massificado       → Retido | Cancelado
  * ============================================================
  */
 
@@ -69,7 +66,7 @@ function retentionQuery_(me, scope, monthKey) {
 function retentionStats_(rows) {
   const byProduct = {};
   Object.keys(RETENTION_PRODUCTS).forEach(function (p) {
-    byProduct[p] = { atendidos: 0, retidos: 0, argumentados: 0, incentivos: 0, cancelados: 0, cashback: 0, milhas: 0 };
+    byProduct[p] = { atendidos: 0, retidos: 0, argumentados: 0, cancelados: 0, cashback: 0, milhas: 0 };
   });
   rows.forEach(function (r) {
     const s = byProduct[r.produto];
@@ -77,7 +74,6 @@ function retentionStats_(rows) {
     s.atendidos++;
     if (r.resultado === 'Retido') s.retidos++;
     if (r.resultado === 'Retido por Argumentação') { s.retidos++; s.argumentados++; }
-    if (r.resultado === 'Retido por Incentivo') { s.retidos++; s.incentivos++; }
     if (r.resultado === 'Cancelado') s.cancelados++;
     if (r.resultado === 'Cashback') s.cashback++;
     if (r.resultado === 'Milhas') s.milhas++;
@@ -86,16 +82,7 @@ function retentionStats_(rows) {
   const cc = byProduct['Cartão de Crédito'];
   const cd = byProduct['Conta Digital'];
   const cb = byProduct['Cashback'];
-
-  // Massificados: agrega todos os produtos "Massificado - *"
-  const ms = { atendidos: 0, retidos: 0, argumentados: 0, incentivos: 0, cancelados: 0 };
-  Object.keys(byProduct).forEach(function (p) {
-    if (p.indexOf(MASSIFICADO_PREFIX) !== 0) return;
-    const s = byProduct[p];
-    ms.atendidos += s.atendidos; ms.retidos += s.retidos;
-    ms.argumentados += s.argumentados; ms.incentivos += s.incentivos;
-    ms.cancelados += s.cancelados;
-  });
+  const ms = byProduct['Massificado'];
 
   return {
     cartao: {
@@ -115,8 +102,7 @@ function retentionStats_(rows) {
       pctMilhas: pct_(cb.milhas, cb.atendidos)
     },
     massificado: {
-      atendidos: ms.atendidos, retidos: ms.retidos, argumentados: ms.argumentados,
-      incentivos: ms.incentivos, cancelados: ms.cancelados,
+      atendidos: ms.atendidos, retidos: ms.retidos, cancelados: ms.cancelados,
       pctRetidos: pct_(ms.retidos, ms.atendidos)
     }
   };

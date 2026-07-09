@@ -88,15 +88,3 @@ function cacheInvalidate_(sheetName) {
 function cacheFlushAll_() {
   Object.keys(SHEETS).forEach(function (k) { cacheInvalidate_(SHEETS[k]); });
 }
-
-/**
- * Carimbo combinado das versões das abas de DADOS.
- * Usado pelo auto-refresh do cliente: muda sempre que qualquer
- * escrita relevante acontece. Lê SOMENTE o CacheService —
- * nunca toca a planilha, por isso é praticamente gratuito.
- */
-function cacheStamp_() {
-  return [SHEETS.SALES, SHEETS.RETENTION, SHEETS.GOALS, SHEETS.SETTINGS,
-    SHEETS.PRODUCTS, SHEETS.USERS, SHEETS.TEAMS]
-    .map(function (s) { return cacheVersion_(s); }).join('|');
-}

@@ -28,7 +28,7 @@ function ensureDefaultSettings_() {
     DEFAULT_PRODUCTS.forEach(function (p) {
       appendRow_(SHEETS.PRODUCTS, {
         id: uid_(), nome: p.nome, categoria: p.categoria,
-        comissaoUnitaria: p.comissaoUnitaria !== undefined ? p.comissaoUnitaria : '', ativo: 'Sim'
+        comissaoUnitaria: DEFAULT_SETTINGS['comissao.global.vendaMassificados'], ativo: 'Sim'
       });
     });
   }
@@ -42,17 +42,11 @@ function settingDescription_(key) {
     'comissao.cartaoFone.bonusPremium': 'Bônus premium Cartão FONE',
     'comissao.cartaoDigital.pontoIncentivo': 'Pontos por retenção incentivo (digital)',
     'comissao.cartaoDigital.pontoArgumentacao': 'Pontos por retenção argumentação (digital)',
-    'comissao.cartaoDigital.valorPonto': 'Valor em R$ de cada ponto (PDF: R$1 → arg 1,50 / inc 0,50)',
-    'comissao.cashback.faixas': 'Cashback (PDF 6.3.2): prêmio por faixa de conversão',
-    'comissao.retencao.teto': 'Teto do bloco de retenção arg+inc+cashback (PDF 6.4)',
-    'comissao.contaDigital.faixas': 'Conta Digital (PDF 6.6): prêmio por % de retenção',
-    'comissao.contaDigital.bonus': 'Conta Digital (PDF 6.6): bônus 76% / 78%',
-    'comissao.vendas.tabela': 'Vendas coletivas (PDF 6.3.1): R$/venda por faixa [até60, 60-79.99, 80-100, +100]',
-    'comissao.vendas.atingimentoColetivo': '% de atingimento da meta coletiva do mês (atualizar mensalmente)',
-    'comissao.massificados.faixasArg': 'Massificados (PDF 6.5): faixas de conversão — Argumentação (%)',
-    'comissao.massificados.faixasInc': 'Massificados (PDF 6.5): faixas de conversão — Incentivo (%)',
-    'comissao.massificados.arg': 'Massificados (PDF 6.5): R$/retido por Argumentação, por produto e faixa',
-    'comissao.massificados.inc': 'Massificados (PDF 6.5): R$/retido por Incentivo, por produto e faixa',
+    'comissao.cartaoDigital.valorPonto': 'Valor em R$ de cada ponto (digital) — ajustar conforme PDF',
+    'comissao.global.contaDigital': 'R$ por retenção de Conta Digital — ajustar conforme PDF',
+    'comissao.global.retencaoMassificados': 'R$ por massificado retido — ajustar conforme PDF',
+    'comissao.global.conversaoMilhasCashback': 'R$ por conversão Milhas → Cashback — ajustar conforme PDF',
+    'comissao.global.vendaMassificados': 'R$ por venda de massificado — ajustar conforme PDF',
     'meta.padrao.vendas': 'Meta padrão de vendas/mês',
     'meta.padrao.comissao': 'Meta padrão de comissão R$/mês',
     'meta.padrao.retencao': 'Meta padrão de % de retenção',

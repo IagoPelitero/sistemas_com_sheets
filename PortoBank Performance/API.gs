@@ -35,8 +35,7 @@ function api(action, payload) {
           reportTypes: REPORT_TYPES,
           themes: THEMES,
           products: readAll_(SHEETS.PRODUCTS).filter(function (p) { return p.ativo === 'Sim'; }),
-          teams: readAll_(SHEETS.TEAMS),
-          supervisao: supervisorNameFor_(me)
+          teams: readAll_(SHEETS.TEAMS)
         };
         break;
 
@@ -84,19 +83,6 @@ function api(action, payload) {
         data = readAll_(SHEETS.SETTINGS);
         break;
       case 'settings.update': data = settingsUpdate_(me, payload.chave, payload.valor); break;
-
-      // ---- Auto-refresh (ultraleve: só lê o CacheService) ----
-      case 'version': data = { stamp: cacheStamp_() }; break;
-
-      // ---- Auditoria (SOMENTE ADMIN) ----
-      case 'audit.status':
-        if (!isAdmin_(me)) throw new Error('Somente o ADMIN pode consultar a auditoria.');
-        data = auditStatus_();
-        break;
-      case 'audit.rotate':
-        if (!isAdmin_(me)) throw new Error('Somente o ADMIN pode arquivar a auditoria.');
-        data = auditRotateNow_();
-        break;
       case 'products.save': data = productsSave_(me, payload); break;
       case 'products.delete': data = productsDelete_(me, payload.id); break;
       case 'teams.save': data = teamsSave_(me, payload); break;
@@ -118,21 +104,4 @@ function publicUser_(u) {
     id: u.id, nome: u.nome, email: u.email, cargo: u.cargo,
     equipe: u.equipe, status: u.status, tema: u.tema || 'portobank'
   };
-}
-
-/**
- * Nome do supervisor da equipe do usuário (para exibição no chip
- * da sidebar). Busca a equipe pelo nome e resolve o supervisorId.
- * Retorna '' se a equipe não tiver supervisor cadastrado.
- */
-function supervisorNameFor_(me) {
-  if (!me.equipe) return '';
-  const team = readAll_(SHEETS.TEAMS).find(function (t) {
-    return String(t.nome) === String(me.equipe);
-  });
-  if (!team || !team.supervisorId) return '';
-  const sup = readAll_(SHEETS.USERS).find(function (u) {
-    return String(u.id) === String(team.supervisorId);
-  });
-  return sup ? sup.nome : '';
 }

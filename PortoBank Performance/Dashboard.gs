@@ -55,18 +55,8 @@ function dashboardBuild_(me, monthKey) {
       .slice(0, 50)
       .map(function (s) { return { data: s.data, cpf: maskCpf_(s.cpf), produto: s.produto, quantidade: s.quantidade, obs: s.obs }; }),
     massificadosRetidos: baseRets
-      .filter(function (r) {
-        return String(r.produto).indexOf(MASSIFICADO_PREFIX) === 0 &&
-          (r.resultado === 'Retido por Argumentação' || r.resultado === 'Retido por Incentivo');
-      })
-      .map(function (r) {
-        return {
-          data: r.data, cpf: maskCpf_(r.cpf),
-          produto: String(r.produto).replace(MASSIFICADO_PREFIX + ' - ', ''),
-          resultado: r.resultado === 'Retido por Argumentação' ? 'Argumentação' : 'Incentivo',
-          obs: r.obs
-        };
-      }),
+      .filter(function (r) { return r.produto === 'Massificado' && r.resultado === 'Retido'; })
+      .map(function (r) { return { data: r.data, cpf: maskCpf_(r.cpf), obs: r.obs }; }),
     tabelaDiaria: dailyRetentionTable_(baseRets, mk)
   };
 }
