@@ -1,184 +1,182 @@
-# PortoBank Performance
+/**
+ * ============================================================
+ * PortoBank Performance — Utils.gs
+ * ------------------------------------------------------------
+ * Funções utilitárias + camada de acesso a dados (DB).
+ * TODO acesso à planilha passa por aqui — os demais módulos
+ * nunca chamam SpreadsheetApp diretamente para CRUD.
+ * ============================================================
+ */
 
-Sistema corporativo de gestão de performance para a operação PortoBank: vendas, retenções, comissão automática, ranking, dashboards, metas, usuários e relatórios — 100% sobre Google Apps Script + Google Sheets, sem servidor externo.
+/** Retorna a planilha ativa (banco de dados). */
+function getDb_() {
+  return SpreadsheetApp.getActiveSpreadsheet();
+}
 
----
+/**
+ * Garante que a aba exista com os cabeçalhos corretos.
+ * @param {string} name Nome da aba (ver SHEETS).
+ * @return {GoogleAppsScript.Spreadsheet.Sheet}
+ */
+function ensureSheet_(name) {
+  const db = getDb_();
+  let sheet = db.getSheetByName(name);
+  if (!sheet) {
+    sheet = db.insertSheet(name);
+    sheet.getRange(1, 1, 1, HEADERS[name].length).setValues([HEADERS[name]]).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
 
-## 1. Visão geral
+/** Gera um ID único curto. */
+function uid_() {
+  return Utilities.getUuid().slice(0, 8) + Date.now().toString(36);
+}
 
-- **SPA** servida via `HtmlService` (interface SaaS moderna, responsiva, com animações suaves e 4 temas).
-- **Google Sheets** como banco de dados, com **cache inteligente** (`CacheService`) — o sistema **não** lê a planilha inteira a cada clique.
-- **Permissões por cargo** aplicadas no servidor (nunca só na interface).
-- **Comissões calculadas automaticamente** a partir de regras editáveis em Configurações.
-- Preparado para **centenas de usuários simultâneos**: `LockService` em toda escrita, leituras servidas do cache, uma única chamada de servidor por página.
+/** Data/hora atual em ISO. */
+function nowIso_() {
+  return new Date().toISOString();
+}
 
-## 2. Arquitetura
+/**
+ * Lê TODAS as linhas de uma aba como objetos — com cache.
+ * Esta é a ÚNICA função de leitura em massa do sistema.
+ * @param {string} sheetName
+ * @return {Object[]} linhas como objetos {header: valor}
+ */
+function readAll_(sheetName) {
+  const cached = cacheGet_(sheetName);
+  if (cached) return cached;
 
-```
-Cliente (SPA)                       Servidor (Apps Script)
-┌────────────────────┐   api()    ┌──────────────────────────────┐
-│ Index.html         │ ─────────► │ API.gs  (roteador único)     │
-│ Styles.html        │            │  ├─ Auth.gs   (sessão/perms) │
-│ App.html (JS)      │ ◄───────── │  ├─ Users.gs  Sales.gs       │
-└────────────────────┘  JSON      │  ├─ Retention.gs Goals.gs    │
-                                  │  ├─ Commission.gs Dashboard  │
-                                  │  ├─ Ranking.gs Reports.gs    │
-                                  │  ├─ Settings.gs              │
-                                  │  └─ Cache.gs + Utils.gs (DB) │
-                                  └───────────┬──────────────────┘
-                                              │ readAll_/append/update/delete
-                                       CacheService ⇄ Google Sheets
-```
+  const sheet = ensureSheet_(sheetName);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) { cachePut_(sheetName, []); return []; }
 
-Princípios:
-1. **Um único endpoint** — o cliente só chama `api(action, payload)`. Toda chamada autentica, autoriza e devolve `{ok, data|error}`.
-2. **Camada de dados única** — `Utils.gs` concentra `readAll_` (leitura cacheada), `appendRow_`, `updateRowById_` e `deleteRowById_` (com `LockService` e invalidação de cache). Nenhum módulo toca `SpreadsheetApp` diretamente para CRUD.
-3. **Cache por aba com version token** — cada escrita invalida somente o cache da aba alterada (O(1)); dados grandes são divididos em chunks de 90KB.
-4. **Cálculo no servidor** — dashboards chegam prontos ao cliente em uma chamada; o cliente apenas renderiza.
+  const headers = HEADERS[sheetName];
+  const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
+  const rows = values.map(function (r) {
+    const obj = {};
+    headers.forEach(function (h, i) { obj[h] = r[i]; });
+    return obj;
+  });
+  cachePut_(sheetName, rows);
+  return rows;
+}
 
-## 3. Estrutura das planilhas (criadas automaticamente)
+/**
+ * Acrescenta uma linha (objeto) a uma aba, com Lock e
+ * invalidação de cache.
+ * @param {string} sheetName
+ * @param {Object} obj
+ */
+function appendRow_(sheetName, obj) {
+  withLock_(function () {
+    const sheet = ensureSheet_(sheetName);
+    const row = HEADERS[sheetName].map(function (h) { return obj[h] !== undefined ? obj[h] : ''; });
+    sheet.appendRow(row);
+  });
+  cacheInvalidate_(sheetName);
+}
 
-| Aba | Colunas |
-|---|---|
-| `Users` | id, nome, email, cargo, equipe, status, tema, criadoEm, atualizadoEm |
-| `Sales` | id, data, cpf, produto, quantidade, obs, userId, equipe, criadoEm |
-| `Retention` | id, data, cpf, produto, resultado, obs, userId, equipe, criadoEm |
-| `Goals` | id, tipo (user/team), alvoId, metaVendas, metaComissao, metaRetencao, mes, atualizadoEm |
-| `Settings` | chave, valor, descricao, atualizadoEm |
-| `Products` | id, nome, categoria, comissaoUnitaria, ativo |
-| `Teams` | id, nome, supervisorId, tipo, ativo |
-| `Reports` | id, tipo, solicitante, parametros, status, criadoEm |
-| `Audit` | id, quando, quem, acao, detalhe |
+/**
+ * Atualiza a linha cujo campo `id` corresponda.
+ * @param {string} sheetName
+ * @param {string} id
+ * @param {Object} patch Campos a alterar.
+ * @return {boolean} true se encontrou e atualizou.
+ */
+function updateRowById_(sheetName, id, patch) {
+  let updated = false;
+  withLock_(function () {
+    const sheet = ensureSheet_(sheetName);
+    const headers = HEADERS[sheetName];
+    const idCol = headers.indexOf('id') + 1;
+    const rowIndex = findRowIndexById_(sheet, idCol, id);
+    if (rowIndex === -1) return;
+    const range = sheet.getRange(rowIndex, 1, 1, headers.length);
+    const current = range.getValues()[0];
+    headers.forEach(function (h, i) {
+      if (patch[h] !== undefined) current[i] = patch[h];
+    });
+    range.setValues([current]);
+    updated = true;
+  });
+  if (updated) cacheInvalidate_(sheetName);
+  return updated;
+}
 
-> Nunca reordene colunas manualmente — os cabeçalhos oficiais estão em `Config.gs` (`HEADERS`).
+/**
+ * EXCLUI DEFINITIVAMENTE a linha (deleteRow) — sem soft delete,
+ * sem lixo de dados.
+ * @param {string} sheetName
+ * @param {string} id
+ * @return {boolean}
+ */
+function deleteRowById_(sheetName, id) {
+  let deleted = false;
+  withLock_(function () {
+    const sheet = ensureSheet_(sheetName);
+    const idCol = HEADERS[sheetName].indexOf('id') + 1;
+    const rowIndex = findRowIndexById_(sheet, idCol, id);
+    if (rowIndex === -1) return;
+    sheet.deleteRow(rowIndex);
+    deleted = true;
+  });
+  if (deleted) cacheInvalidate_(sheetName);
+  return deleted;
+}
 
-## 4. Fluxo dos usuários
+/**
+ * Localiza o índice (1-based) da linha pelo id usando busca
+ * apenas na coluna de id (leitura mínima, sem varrer a planilha).
+ */
+function findRowIndexById_(sheet, idCol, id) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return -1;
+  const ids = sheet.getRange(2, idCol, lastRow - 1, 1).getValues();
+  for (let i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(id)) return i + 2;
+  }
+  return -1;
+}
 
-### Primeiro login (bootstrap)
-Se **nenhum usuário existir** na aba `Users`, o primeiro acesso:
-1. cria automaticamente o usuário logado;
-2. define como **ADMIN**;
-3. registra **normalmente e visivelmente** na aba `Users`;
-4. popula Settings/Products com os padrões (comissões já prontas).
+/**
+ * Executa uma função com LockService (evita corrida em escrita
+ * concorrente — preparado para centenas de usuários).
+ */
+function withLock_(fn) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000); // até 20s
+  try { fn(); } finally { lock.releaseLock(); }
+}
 
-### Logins seguintes
-O e-mail da conta Google é comparado com a aba `Users`. Não cadastrado ou inativo → tela de acesso negado.
+/** Registra evento de auditoria (best-effort, não bloqueia). */
+function audit_(quem, acao, detalhe) {
+  try {
+    appendRow_(SHEETS.AUDIT, {
+      id: uid_(), quando: nowIso_(), quem: quem, acao: acao, detalhe: detalhe || ''
+    });
+  } catch (e) { /* auditoria nunca derruba a operação principal */ }
+}
 
-### Exclusão de usuário
-Exclusão é **definitiva**: a linha é removida da planilha (`deleteRow`). Sem soft delete, sem lixo de dados.
+/** Normaliza data (Date|string) para 'yyyy-MM-dd'. */
+function toDateKey_(v) {
+  const d = (v instanceof Date) ? v : new Date(v);
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+}
 
-## 5. Cargos e permissões
+/** Chave de mês 'yyyy-MM'. */
+function toMonthKey_(v) {
+  return toDateKey_(v).slice(0, 7);
+}
 
-| Cargo | Escopo | Menu |
-|---|---|---|
-| ADMIN | tudo | todas as 9 abas |
-| Supervisor de vendas | própria equipe | Dashboard, Nova Venda, Equipe, Ranking, Gestão, Relatórios |
-| Supervisor de retenção e vendas fone | própria equipe | + Nova Retenção |
-| Supervisor de vendas e retenção digital | própria equipe | + Nova Retenção |
-| Atendente de vendas | próprios dados | Dashboard, Nova Venda, Equipe, Ranking |
-| Atendente de vendas e retenção fone | próprios dados | + Nova Retenção |
-| Atendente de retenção e vendas digital | próprios dados | + Nova Retenção |
+/** Percentual seguro (evita divisão por zero). */
+function pct_(part, total) {
+  return total > 0 ? Math.round((part / total) * 1000) / 10 : 0;
+}
 
-Regras-chave:
-- Supervisor **nunca** vê equipes de outros supervisores.
-- Supervisor cadastra/edita/exclui membros e altera metas **apenas da própria equipe**; não pode criar ADMIN nem supervisores.
-- Na aba **Equipe** e no **Ranking** de atendentes, colegas aparecem **sem nomes** (rótulos anônimos; a própria linha aparece como "Você").
-- Toda regra é validada **no servidor** (`assertCanManage_`, checagens em cada módulo).
-
-## 6. Regras de comissão
-
-Todas em `Settings` (chaves `comissao.*`) — **editáveis em Configurações, sem código**.
-
-### Cartão de Crédito (FONE)
-| % Retidos | Comissão |
-|---|---|
-| 73% | R$150 |
-| 74% | R$180 |
-| 75% | R$200 |
-
-Bônus por Argumentação: 35–37% → +R$100 · 38–39% → +R$150 · ≥40% → +R$200.
-Bônus Premium: 76% retidos + 42% argumentação → R$100 · 78% + 44% → R$200 (prevalece o maior). Tudo automático.
-
-### Cartão de Crédito (DIGITAL)
-- Retenção incentivo = **0,5 ponto** · Retenção por argumentação = **1,5 ponto**.
-- Somente Cartão possui regra de pontos. O valor R$/ponto é a chave `comissao.cartaoDigital.valorPonto`.
-
-### Comissões globais (Conta Digital, Retenção Massificados, Milhas→Cashback, Venda Massificados)
-Já vêm **cadastradas automaticamente** com valores padrão e são editáveis depois.
-> ⚠️ **Ajustar conforme o PDF oficial**: o PDF de regras não foi anexado ao projeto, então os valores unitários dessas quatro comissões são provisórios. Atualize-os em **Configurações** (chaves `comissao.global.*`) assim que tiver os valores oficiais.
-
-## 7. Instalação
-
-1. Crie uma nova Planilha Google (será o banco de dados).
-2. `Extensões → Apps Script`.
-3. Copie os arquivos de `src/` para o editor: todos os `.gs` como *scripts* e `Index.html`, `Styles.html`, `App.html` como *arquivos HTML* (mesmos nomes, sem extensão `.gs`/`.html` no editor).
-4. Em `Configurações do projeto`, marque "Mostrar manifesto appsscript.json" e substitua pelo `src/appsscript.json`.
-5. Salve.
-
-**Com clasp (recomendado para versionamento):**
-```bash
-npm i -g @google/clasp
-clasp login
-cp .clasp.json.example .clasp.json   # cole o scriptId do seu projeto
-clasp push
-```
-
-## 8. Publicação
-
-1. `Implantar → Nova implantação → App da web`.
-2. **Executar como:** *Usuário que acessa o app* (necessário para identificar o e-mail de cada pessoa).
-3. **Quem pode acessar:** *Qualquer pessoa no domínio* (recomendado) ou *Qualquer pessoa com conta Google*.
-4. Abra a URL gerada. O primeiro acesso cria o ADMIN automaticamente.
-
-## 9. Atualização
-
-- Editou código? `clasp push` (ou cole no editor) e depois `Implantar → Gerenciar implantações → ✏️ → Nova versão`. A URL não muda.
-- Dados e configurações **não** exigem redeploy — tudo vem da planilha/cache.
-
-## 10. Como alterar…
-
-- **Regras de comissão:** Configurações (ADMIN) → chaves `comissao.*`. Faixas do cartão fone são JSON (ex.: `[{"pct":73,"valor":150},...]`).
-- **Metas:** Gestão da Equipe → 🎯 (individual ou da equipe), ou metas padrão em `meta.padrao.*`.
-- **Produtos:** Configurações → Produtos (nome, comissão unitária, ativo).
-- **Novos cargos:** adicione em `ROLES` e `PERMISSIONS` (`Config.gs`) — nada mais é necessário; menu e regras derivam de `PERMISSIONS`.
-- **Equipes:** aba Cadastro (ADMIN).
-
-## 11. Cache — como funciona e como usar
-
-- `readAll_(aba)` → tenta o cache; se vazio, lê a planilha **uma vez** e grava em chunks (TTL 5 min).
-- Toda escrita (`appendRow_`, `updateRowById_`, `deleteRowById_`) troca o *version token* da aba → a próxima leitura recarrega **somente aquela aba**.
-- O cliente mantém cache por página+mês e o limpa após qualquer escrita → **atualização imediata** após cadastrar venda/retenção/usuário/meta.
-- Para forçar limpeza geral: execute `cacheFlushAll_()` no editor.
-
-## 12. Boas práticas adotadas
-
-- Funções internas com sufixo `_` (não invocáveis pelo cliente); único endpoint público `api()`.
-- `LockService` em toda escrita (concorrência segura).
-- Validação de entrada no servidor (CPF, produto/resultado, cargos, escopos).
-- CPF mascarado na exibição e nos relatórios (LGPD).
-- Auditoria de todas as operações relevantes (aba `Audit`).
-- Zero duplicação: camada de dados única em `Utils.gs`.
-
-## 13. Troubleshooting
-
-| Sintoma | Causa provável | Solução |
-|---|---|---|
-| "Não foi possível identificar sua conta Google" | Web App publicado como "Executar como: eu" | Republicar como *Usuário que acessa o app* |
-| "Seu e-mail não está cadastrado" | Usuário não existe na aba Users | ADMIN/Supervisor cadastra em Gestão/Cadastro |
-| Dados desatualizados após edição manual no Sheets | Cache ainda válido (até 5 min) | Aguarde o TTL ou rode `cacheFlushAll_()` |
-| Erro de lock/timeout em pico | Muitas escritas simultâneas | O lock espera até 20s; se persistir, reduza escritas em lote |
-| Gráficos não aparecem | CDN do Chart.js bloqueada na rede | Liberar `cdnjs.cloudflare.com` |
-| Comissão global "errada" | Valores provisórios do seed | Ajustar chaves `comissao.global.*` conforme o PDF oficial |
-
-## 14. Roadmap
-
-- [ ] Importar valores oficiais do PDF de comissões (chaves `comissao.global.*`).
-- [ ] Exportação de relatórios em PDF/XLSX além de CSV.
-- [ ] Notificações (e-mail) de meta batida e fechamento mensal.
-- [ ] Histórico/gráfico comparativo entre meses.
-- [ ] Edição/estorno de lançamentos com trilha de aprovação.
-- [ ] Paginação server-side para bases com dezenas de milhares de linhas.
-
----
-
-Licença MIT · Contribuições: ver `CONTRIBUTING.md` · Histórico: `CHANGELOG.md`
+/** Valida CPF (apenas formato: 11 dígitos). */
+function isValidCpf_(cpf) {
+  return /^\d{11}$/.test(String(cpf).replace(/\D/g, ''));
+}
