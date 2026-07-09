@@ -102,6 +102,13 @@ function commissionCartaoFone_(cartao) {
   const detalhes = [];
   let base = 0, bonusArg = 0, bonusPremium = 0;
 
+  // Volume mínimo para prêmios por faixa (0 = desativado)
+  const minCasos = settingNum_('comissao.faixas.minimoCasos');
+  if (minCasos > 0 && cartao.atendidos < minCasos) {
+    return { base: 0, bonusArg: 0, bonusPremium: 0, total: 0,
+      detalhes: ['Volume mínimo não atingido (' + cartao.atendidos + '/' + minCasos + ' casos)'] };
+  }
+
   // Faixas base: aplica a MAIOR faixa atingida
   settingJson_('comissao.cartaoFone.tiers').forEach(function (t) {
     if (cartao.pctRetidos >= t.pct) { base = t.valor; }
@@ -159,6 +166,8 @@ function commissionCartaoDigital_(rows) {
  */
 function commissionCashback_(cb) {
   let premio = 0;
+  const minCasos = settingNum_('comissao.faixas.minimoCasos');
+  if (minCasos > 0 && cb.atendidos < minCasos) return { premio: 0, pct: cb.pctCashback };
   settingJson_('comissao.cashback.faixas').forEach(function (f) {
     if (cb.pctCashback >= f.pct && f.valor > premio) premio = f.valor;
   });
@@ -172,6 +181,8 @@ function commissionCashback_(cb) {
  */
 function commissionContaDigital_(conta) {
   let premio = 0, bonus = 0;
+  const minCasos = settingNum_('comissao.faixas.minimoCasos');
+  if (minCasos > 0 && conta.atendidos < minCasos) return { premio: 0, bonus: 0, total: 0, pct: conta.pctRetidos };
   settingJson_('comissao.contaDigital.faixas').forEach(function (f) {
     if (conta.pctRetidos >= f.pct && f.valor > premio) premio = f.valor;
   });
@@ -255,28 +266,40 @@ function commissionForUser_(user, monthKey) {
 
   const isDigital = user.cargo === ROLES.AT_RET_DIGITAL || user.cargo === ROLES.SUP_RET_DIGITAL;
   const digital = commissionCartaoDigital_(rets);
-  const cartao = isDigital
-    ? { base: 0, bonusArg: 0, bonusPremium: 0, total: digital.valor, pontos: digital.pontos, detalhes: ['Pontuação digital: ' + digital.pontos + ' pts'] }
-    : commissionCartaoFone_(stats.cartao);
-
-  const cashback = commissionCashback_(stats.cashback);
-  const conta = commissionContaDigital_(stats.conta);
   const mass = commissionMassificados_(rets);
   const vendas = commissionVendas_(sales, atingimento);
 
-  // Teto do bloco de retenção (PDF 6.4) — argumentação + incentivo
-  // (pontos do cartão digital) + cashback, limitados a R$530.
-  const teto = settingNum_('comissao.retencao.teto');
-  const nucleoBruto = (isDigital ? digital.valor : 0) + cashback.premio;
-  const nucleo = teto > 0 ? Math.min(nucleoBruto, teto) : nucleoBruto;
-  const cartaoAjustado = isDigital ? Math.max(0, nucleo - cashback.premio) : cartao.total;
-  const cashbackAjustado = isDigital ? Math.min(cashback.premio, nucleo) : cashback.premio;
+  let cartao, cashback, conta;
+  if (isDigital) {
+    // DIGITAL ganha POR RETENÇÃO — nunca por faixa:
+    //  - Cartão: pontos (arg 1,5 = R$1,50 · inc 0,5 = R$0,50)
+    //  - Conta/Cashback: valor unitário configurável (padrão R$0)
+    cartao = { base: 0, bonusArg: 0, bonusPremium: 0, total: digital.valor,
+      pontos: digital.pontos, detalhes: ['Pontuação digital: ' + digital.pontos + ' pts'] };
+    const contaUnit = settingNum_('comissao.digital.contaPorRetencao');
+    const cbUnit = settingNum_('comissao.digital.cashbackPorConversao');
+    conta = { premio: 0, bonus: 0, total: round2_(stats.conta.retidos * contaUnit), pct: stats.conta.pctRetidos };
+    cashback = { premio: round2_(stats.cashback.cashback * cbUnit), pct: stats.cashback.pctCashback };
+  } else {
+    // FONE segue as regras por faixa (spec + PDF 6.6 / 6.3.2)
+    cartao = commissionCartaoFone_(stats.cartao);
+    conta = commissionContaDigital_(stats.conta);
+    cashback = commissionCashback_(stats.cashback);
+  }
 
-  const totalRetencao = round2_(
-    (isDigital ? cartaoAjustado : cartao.total) +
-    cashbackAjustado + conta.total + mass.total
-  );
+  // Teto de R$530: aplica-se SOMENTE à retenção de CARTÃO DE
+  // CRÉDITO do perfil DIGITAL (pontos de argumentação +
+  // incentivo). Não alcança os demais produtos nem o fone.
+  const teto = settingNum_('comissao.retencao.teto');
+  const cartaoFinal = (isDigital && teto > 0)
+    ? Math.min(cartao.total, teto)
+    : cartao.total;
+
+  const totalRetencao = round2_(cartaoFinal + cashback.premio + conta.total + mass.total);
   const total = round2_(vendas.total + totalRetencao);
+
+  const tetoAplicado = isDigital && teto > 0 && cartao.total > teto;
+  cartao.total = cartaoFinal;
 
   return {
     mes: mk,
@@ -290,9 +313,9 @@ function commissionForUser_(user, monthKey) {
       vendas: vendas.total,
       contaDigital: conta.total,
       retencaoMassificados: mass.total,
-      conversaoMilhasCashback: cashbackAjustado
+      conversaoMilhasCashback: cashback.premio
     },
-    tetoRetencaoAplicado: nucleoBruto > nucleo,
+    tetoRetencaoAplicado: tetoAplicado,
     totalVendas: vendas.total,
     totalRetencao: totalRetencao,
     total: total

@@ -3,6 +3,18 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.3.2] — 2026-07-09
+### Alterado
+- Teto de R$530 agora se aplica EXCLUSIVAMENTE à retenção de Cartão de Crédito do perfil DIGITAL (pontos de argumentação + incentivo). Cashback, Conta Digital, massificados e o perfil fone ficam fora do teto.
+
+## [1.3.1] — 2026-07-09
+### Corrigido
+- Comissão do perfil DIGITAL: os prêmios por faixa de Conta Digital e Cashback estavam sendo pagos também aos atendentes digitais — com 1 conta retida (100% → R$350) + 1 cashback (R$130) + pontos, o total chegava a R$530 "sem explicação". Agora o DIGITAL ganha exclusivamente POR RETENÇÃO: pontos do cartão (arg R$1,50 / inc R$0,50) e, opcionalmente, valores unitários configuráveis para Conta e Cashback (padrão R$0). Prêmios por faixa ficam restritos ao perfil FONE.
+
+### Adicionado
+- Chaves `comissao.digital.contaPorRetencao` e `comissao.digital.cashbackPorConversao` (R$ por retenção/conversão no digital; padrão 0).
+- Chave `comissao.faixas.minimoCasos`: volume mínimo de casos/mês para os prêmios por faixa do FONE (evita 1 caso = 100% = prêmio máximo; padrão 0 = desativado).
+
 ## [1.3.0] — 2026-07-09
 ### Alterado
 - Faixa da comissão de vendas agora usa o atingimento INDIVIDUAL (vendas do usuário ÷ meta individual), definida por ADMIN ou supervisor; removida a chave de atingimento coletivo.

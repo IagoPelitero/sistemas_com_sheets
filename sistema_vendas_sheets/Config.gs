@@ -137,9 +137,19 @@ const DEFAULT_SETTINGS = {
     { pct: 42, valor: 100 },
     { pct: 45, valor: 130 }
   ]),
-  // ---- Teto do bloco de retenção (PDF 6.4): argumentação +
-  //      incentivo + cashback somados não passam de R$530 ----
+  // ---- Teto de R$530: SOMENTE retenção de Cartão de Crédito
+  //      do perfil DIGITAL (pontos arg+inc). Demais produtos e
+  //      o fone ficam fora do teto ----
   'comissao.retencao.teto': '530',
+  // ---- Perfil DIGITAL ganha POR RETENÇÃO (nunca por faixa):
+  //      cartão via pontos; conta/cashback por valor unitário
+  //      configurável (padrão 0 = sem comissão unitária) ----
+  'comissao.digital.contaPorRetencao': '0',
+  'comissao.digital.cashbackPorConversao': '0',
+  // ---- Volume mínimo de casos no mês para prêmios por FAIXA
+  //      (fone/conta/cashback). Evita distorção de 1 caso = 100%
+  //      = prêmio máximo. 0 = desativado ----
+  'comissao.faixas.minimoCasos': '0',
   // ---- Conta Digital (PDF 6.6): prêmio fixo por % de retenção ----
   'comissao.contaDigital.faixas': JSON.stringify([
     { pct: 30, valor: 100 },
@@ -188,7 +198,7 @@ const DEFAULT_SETTINGS = {
   'meta.padrao.retencaoConta': '75',
   // ---- Sistema ----
   'sistema.nome': 'PortoBank Performance',
-  'sistema.versao': '1.3.0'
+  'sistema.versao': '1.3.2'
 };
 
 /**
