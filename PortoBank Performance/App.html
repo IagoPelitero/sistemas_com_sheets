@@ -21,17 +21,17 @@ const App = (function () {
   };
 
   const PAGES = {
-    dashboard:     { title: 'Dashboard',        ico: '📊' },
-    novaVenda:     { title: 'Nova Venda',       ico: '🛒' },
-    novaRetencao:  { title: 'Nova Retenção',    ico: '🛡️' },
-    equipe:        { title: 'Equipe',           ico: '👥' },
-    ranking:       { title: 'Ranking',          ico: '🏆' },
-    gestao:        { title: 'Gestão da Equipe', ico: '🧭' },
-    relatorios:    { title: 'Relatórios',       ico: '📄' },
-    cadastro:      { title: 'Cadastro',         ico: '➕' },
-    configuracoes: { title: 'Configurações',    ico: '⚙️' }
+    dashboard:     { title: 'Dashboard',        ico: 'space_dashboard' },
+    novaVenda:     { title: 'Nova Venda',       ico: 'add_shopping_cart' },
+    novaRetencao:  { title: 'Nova Retenção',    ico: 'handshake' },
+    equipe:        { title: 'Equipe',           ico: 'groups' },
+    ranking:       { title: 'Ranking',          ico: 'emoji_events' },
+    gestao:        { title: 'Gestão da Equipe', ico: 'manage_accounts' },
+    relatorios:    { title: 'Relatórios',       ico: 'description' },
+    cadastro:      { title: 'Cadastro',         ico: 'person_add' },
+    configuracoes: { title: 'Configurações',    ico: 'settings' }
   };
-  const THEME_COLORS = { portobank: '#0B2440', rosa: '#D6336C', brasil: '#009739', dark: '#10151C' };
+  const THEMES_UI = ['portobank', 'rosa', 'brasil', 'dark'];
   const BRL = function (v) { return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); };
 
   // ------------------ API ------------------
@@ -65,7 +65,7 @@ const App = (function () {
   function toast(msg, isError) {
     const el = document.createElement('div');
     el.className = 'toast' + (isError ? ' error' : '');
-    el.innerHTML = '<span class="t-ico">' + (isError ? '⚠️' : '✅') + '</span><span>' + esc(msg) + '</span>';
+    el.innerHTML = '<span class="material-icons-round t-ico" aria-hidden="true">' + (isError ? 'error' : 'check_circle') + '</span><span>' + esc(msg) + '</span>';
     document.getElementById('toasts').appendChild(el);
     setTimeout(function () { el.classList.add('out'); setTimeout(function () { el.remove(); }, 260); }, 3200);
   }
@@ -103,7 +103,9 @@ const App = (function () {
     // Navegação conforme permissões
     const nav = document.getElementById('nav');
     nav.innerHTML = s.permissions.pages.map(function (p) {
-      return '<button class="nav-item" data-page="' + p + '"><span class="ico">' + PAGES[p].ico + '</span>' + PAGES[p].title + '</button>';
+      return '<button class="nav-item" data-page="' + p + '">' +
+        '<span class="material-icons-round ico" aria-hidden="true">' + PAGES[p].ico + '</span>' +
+        '<span class="menu-label">' + PAGES[p].title + '</span></button>';
     }).join('');
     nav.addEventListener('click', function (ev) {
       const btn = ev.target.closest('.nav-item');
@@ -117,8 +119,8 @@ const App = (function () {
 
     // Temas
     const row = document.getElementById('themeRow');
-    row.innerHTML = Object.keys(THEME_COLORS).map(function (t) {
-      return '<button class="theme-dot" data-t="' + t + '" style="background:' + THEME_COLORS[t] + '" title="' + t + '" aria-label="Tema ' + t + '"></button>';
+    row.innerHTML = THEMES_UI.map(function (t) {
+      return '<button class="theme-dot" data-t="' + t + '" title="Tema ' + t + '" aria-label="Tema ' + t + '"></button>';
     }).join('');
     row.addEventListener('click', function (ev) {
       const b = ev.target.closest('.theme-dot');
@@ -137,6 +139,24 @@ const App = (function () {
     document.getElementById('menuBtn').addEventListener('click', function () {
       document.getElementById('sidebar').classList.toggle('open');
     });
+
+    // Sidebar recolhível (desktop)
+    document.getElementById('collapseBtn').addEventListener('click', function () {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+    });
+
+    // Ações rápidas conforme permissões
+    const pages = s.permissions.pages;
+    const qv = document.getElementById('quickVenda');
+    const qr = document.getElementById('quickRet');
+    if (pages.indexOf('novaVenda') !== -1) {
+      qv.classList.remove('hidden');
+      qv.addEventListener('click', function () { go('novaVenda'); });
+    }
+    if (pages.indexOf('novaRetencao') !== -1) {
+      qr.classList.remove('hidden');
+      qr.addEventListener('click', function () { go('novaRetencao'); });
+    }
   }
 
   function applyTheme(t, silent) {
@@ -225,7 +245,6 @@ const App = (function () {
         html += kpi('Comissão', BRL(d.cards.comissao), 'Meta: ' + BRL(d.cards.metaComissao), 'ok');
         html += kpi('Progresso da meta', d.cards.progressoComissao + '%', progressBar(d.cards.progressoComissao),
           d.cards.progressoComissao >= 100 ? 'ok' : d.cards.progressoComissao >= 60 ? '' : 'warn');
-        html += kpi('Restante (R$)', BRL(d.cards.restanteComissao), 'para bater a meta', 'warn');
         html += '</div>';
 
         // Blocos de retenção (apenas perfis com retenção)
