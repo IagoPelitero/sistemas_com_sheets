@@ -1,0 +1,905 @@
+<script>
+/* ============================================================
+   PortoBank Performance — App.html (JavaScript da SPA)
+   ------------------------------------------------------------
+   - Uma única API (google.script.run → api(action, payload))
+   - Cache de cliente por página+mês (atualizado após escrita)
+   - Renderização condicionada às permissões do usuário
+   - Toasts de sucesso em toda operação
+   - 4 temas dinâmicos com preferência persistida
+   ============================================================ */
+const App = (function () {
+  'use strict';
+
+  // ------------------ Estado ------------------
+  const state = {
+    session: null,          // {user, permissions, products, ...}
+    page: 'dashboard',
+    month: new Date().toISOString().slice(0, 7),
+    cache: {},              // cache de cliente: chave página:mês
+    charts: []              // instâncias Chart.js ativas
+  };
+
+  const PAGES = {
+    dashboard:     { title: 'Dashboard',        ico: 'space_dashboard' },
+    novaVenda:     { title: 'Nova Venda',       ico: 'add_shopping_cart' },
+    novaRetencao:  { title: 'Nova Retenção',    ico: 'handshake' },
+    equipe:        { title: 'Equipe',           ico: 'groups' },
+    ranking:       { title: 'Ranking',          ico: 'emoji_events' },
+    gestao:        { title: 'Gestão da Equipe', ico: 'manage_accounts' },
+    relatorios:    { title: 'Relatórios',       ico: 'description' },
+    cadastro:      { title: 'Cadastro',         ico: 'person_add' },
+    configuracoes: { title: 'Configurações',    ico: 'settings' }
+  };
+  const THEMES_UI = ['portobank', 'rosa', 'brasil', 'dark'];
+  const BRL = function (v) { return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); };
+
+  // ------------------ API ------------------
+  /** Chama o servidor. Devolve Promise com data ou lança erro. */
+  function api(action, payload) {
+    return new Promise(function (resolve, reject) {
+      google.script.run
+        .withSuccessHandler(function (json) {
+          const res = JSON.parse(json);
+          res.ok ? resolve(res.data) : reject(new Error(res.error));
+        })
+        .withFailureHandler(function (e) { reject(e); })
+        .api(action, payload || {});
+    });
+  }
+
+  /** Busca com cache de cliente. `fresh=true` força ida ao servidor. */
+  function cached(action, payload, fresh) {
+    const key = action + ':' + JSON.stringify(payload || {});
+    if (!fresh && state.cache[key]) return Promise.resolve(state.cache[key]);
+    return api(action, payload).then(function (data) {
+      state.cache[key] = data;
+      return data;
+    });
+  }
+
+  /** Invalida o cache do cliente (após qualquer escrita). */
+  function invalidate() { state.cache = {}; }
+
+  // ------------------ Toast & Modal ------------------
+  function toast(msg, isError) {
+    const el = document.createElement('div');
+    el.className = 'toast' + (isError ? ' error' : '');
+    el.innerHTML = '<span class="material-icons-round t-ico" aria-hidden="true">' + (isError ? 'error' : 'check_circle') + '</span><span>' + esc(msg) + '</span>';
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(function () { el.classList.add('out'); setTimeout(function () { el.remove(); }, 260); }, 3200);
+  }
+
+  function openModal(title, bodyHtml) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').innerHTML = bodyHtml;
+    document.getElementById('modalBackdrop').classList.remove('hidden');
+  }
+  function closeModal() { document.getElementById('modalBackdrop').classList.add('hidden'); }
+
+  function esc(s) {
+    return String(s === undefined || s === null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  // ------------------ Boot ------------------
+  function boot() {
+    api('session').then(function (s) {
+      state.session = s;
+      applyTheme(s.user.tema || 'portobank', true);
+      buildShell();
+      document.getElementById('splash').classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      go('dashboard');
+    }).catch(function (e) {
+      document.getElementById('splash').classList.add('hidden');
+      document.getElementById('deniedMsg').textContent = String(e.message || e).replace('ACCESS_DENIED: ', '');
+      document.getElementById('denied').classList.remove('hidden');
+    });
+  }
+
+  function buildShell() {
+    const s = state.session;
+    // Navegação conforme permissões
+    const nav = document.getElementById('nav');
+    nav.innerHTML = s.permissions.pages.map(function (p) {
+      return '<button class="nav-item" data-page="' + p + '">' +
+        '<span class="material-icons-round ico" aria-hidden="true">' + PAGES[p].ico + '</span>' +
+        '<span class="menu-label">' + PAGES[p].title + '</span></button>';
+    }).join('');
+    nav.addEventListener('click', function (ev) {
+      const btn = ev.target.closest('.nav-item');
+      if (btn) { go(btn.dataset.page); document.getElementById('sidebar').classList.remove('open'); }
+    });
+
+    // Usuário: sempre o NOME (nunca o e-mail) + cargo + contexto:
+    //  - Atendente  → Supervisão: <nome do supervisor da equipe>
+    //  - Supervisor → Equipe: <nome da equipe>
+    //  - ADMIN      → Supervisão, se houver equipe/supervisor cadastrado
+    document.getElementById('userName').textContent = s.user.nome;
+    document.getElementById('userRole').textContent = s.user.cargo;
+    document.getElementById('userAvatar').textContent = s.user.nome.slice(0, 2).toUpperCase();
+    const extra = document.getElementById('userExtra');
+    if (s.permissions.scope === 'self') {
+      extra.textContent = 'Supervisão: ' + (s.supervisao || '—');
+    } else if (s.permissions.scope === 'team') {
+      extra.textContent = 'Equipe: ' + (s.user.equipe || '—');
+    } else {
+      extra.textContent = s.supervisao ? 'Supervisão: ' + s.supervisao : '';
+    }
+
+    // Temas
+    const row = document.getElementById('themeRow');
+    row.innerHTML = THEMES_UI.map(function (t) {
+      return '<button class="theme-dot" data-t="' + t + '" title="Tema ' + t + '" aria-label="Tema ' + t + '"></button>';
+    }).join('');
+    row.addEventListener('click', function (ev) {
+      const b = ev.target.closest('.theme-dot');
+      if (b) applyTheme(b.dataset.t);
+    });
+
+    // Mês
+    const mp = document.getElementById('monthPicker');
+    mp.value = state.month;
+    mp.addEventListener('change', function () {
+      state.month = mp.value || state.month;
+      invalidate(); go(state.page);
+    });
+
+    // Menu mobile
+    document.getElementById('menuBtn').addEventListener('click', function () {
+      document.getElementById('sidebar').classList.toggle('open');
+    });
+
+    // Auto-refresh do dashboard
+    pollSchedule();
+
+    // Sidebar recolhível (desktop)
+    document.getElementById('collapseBtn').addEventListener('click', function () {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+    });
+
+    // Ações rápidas conforme permissões
+    const pages = s.permissions.pages;
+    const qv = document.getElementById('quickVenda');
+    const qr = document.getElementById('quickRet');
+    if (pages.indexOf('novaVenda') !== -1) {
+      qv.classList.remove('hidden');
+      qv.addEventListener('click', function () { go('novaVenda'); });
+    }
+    if (pages.indexOf('novaRetencao') !== -1) {
+      qr.classList.remove('hidden');
+      qr.addEventListener('click', function () { go('novaRetencao'); });
+    }
+  }
+
+  function applyTheme(t, silent) {
+    document.body.dataset.theme = t;
+    document.querySelectorAll('.theme-dot').forEach(function (d) {
+      d.classList.toggle('active', d.dataset.t === t);
+    });
+    if (!silent) {
+      api('users.theme', { tema: t }).then(function () { toast('Tema salvo!'); }).catch(function (e) { toast(e.message, true); });
+    }
+  }
+
+  // ------------------ Auto-refresh (com travas) ------------------
+  // Mantém o dashboard atualizado sem prejudicar o sistema:
+  //  - Endpoint 'version' só lê o CacheService (não toca o Sheets);
+  //  - Pausa com aba em segundo plano, fora do dashboard ou com modal aberto;
+  //  - Nunca sobrepõe chamadas (pula o ciclo se a anterior não voltou);
+  //  - Circuit breaker: resposta lenta/erro dobra o intervalo (60s→…→8min)
+  //    e volta ao normal quando estabiliza;
+  //  - Jitter aleatório evita que todos os clientes disparem juntos.
+  const poll = { timer: null, base: 60000, interval: 60000, max: 480000, inflight: false, stamp: null };
+
+  function pollSchedule() {
+    clearTimeout(poll.timer);
+    poll.timer = setTimeout(pollTick, poll.interval + Math.random() * 8000);
+  }
+
+  function pollTick() {
+    const modalOpen = !document.getElementById('modalBackdrop').classList.contains('hidden');
+    if (document.hidden || state.page !== 'dashboard' || modalOpen || poll.inflight) { pollSchedule(); return; }
+    poll.inflight = true;
+    const t0 = Date.now();
+    api('version', {}).then(function (v) {
+      poll.inflight = false;
+      poll.interval = (Date.now() - t0 > 5000)
+        ? Math.min(poll.interval * 2, poll.max)   // lento → desacelera
+        : poll.base;                              // saudável → normaliza
+      if (poll.stamp && v.stamp !== poll.stamp) { // houve escrita em algum dado
+        invalidate();
+        go('dashboard');
+      }
+      poll.stamp = v.stamp;
+      pollSchedule();
+    }).catch(function () {
+      poll.inflight = false;
+      poll.interval = Math.min(poll.interval * 2, poll.max); // erro → desacelera
+      pollSchedule();
+    });
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) pollSchedule(); // volta ao 1º plano → retoma
+  });
+
+  // ------------------ Router ------------------
+  function go(page) {
+    if (state.session.permissions.pages.indexOf(page) === -1) page = 'dashboard';
+    state.page = page;
+    document.getElementById('pageTitle').textContent = PAGES[page].title;
+    document.querySelectorAll('.nav-item').forEach(function (b) {
+      b.classList.toggle('active', b.dataset.page === page);
+    });
+    state.charts.forEach(function (c) { c.destroy(); });
+    state.charts = [];
+    const el = document.getElementById('content');
+    el.innerHTML = '<div class="empty">Carregando…</div>';
+    RENDER[page](el);
+  }
+
+  // ------------------ Helpers de UI ------------------
+  function kpi(label, value, sub, cls) {
+    return '<div class="card kpi ' + (cls || '') + '"><div class="kpi-label">' + label + '</div>' +
+      '<div class="kpi-value">' + value + '</div>' + (sub ? '<div class="kpi-sub">' + sub + '</div>' : '') + '</div>';
+  }
+  function progressBar(pct) {
+    const p = Math.min(100, pct || 0);
+    return '<div class="progress' + (p >= 100 ? ' ok' : '') + '"><div style="width:' + p + '%"></div></div>';
+  }
+  function table(headers, rows, emptyMsg) {
+    if (!rows.length) return '<div class="empty">' + (emptyMsg || 'Sem registros neste mês.') + '</div>';
+    return '<div class="table-wrap"><table><thead><tr>' +
+      headers.map(function (h) { return '<th>' + h + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
+  }
+  function lineChart(canvasId, labels, datasets) {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+    const c = new Chart(ctx, {
+      type: 'line',
+      data: { labels: labels, datasets: datasets.map(function (d, i) {
+        return { label: d.label, data: d.data, tension: .35, fill: true,
+          borderColor: i === 0 ? css('--accent') : css('--ok'),
+          backgroundColor: 'transparent', pointRadius: 2 };
+      }) },
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: css('--ink-2') } } },
+        scales: { x: { ticks: { color: css('--ink-2') }, grid: { display: false } },
+                  y: { ticks: { color: css('--ink-2') }, grid: { color: css('--line') }, beginAtZero: true } } }
+    });
+    state.charts.push(c);
+  }
+  function pieChart(canvasId, labels, data, colors) {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+    const c = new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }] },
+      options: { responsive: true, maintainAspectRatio: false, cutout: '58%',
+        plugins: { legend: { position: 'bottom', labels: { color: css('--ink-2'), boxWidth: 12 } } } }
+    });
+    state.charts.push(c);
+  }
+  function css(v) { return getComputedStyle(document.body).getPropertyValue(v).trim(); }
+
+  // ------------------ Páginas ------------------
+  const RENDER = {
+
+    /* ---------- DASHBOARD ---------- */
+    dashboard: function (el) {
+      cached('dashboard', { mes: state.month }).then(function (d) {
+        const s = state.session;
+        const hasRet = s.permissions.pages.indexOf('novaRetencao') !== -1;
+        let html = '';
+
+        // Cards superiores — dados SEMPRE individuais (do próprio user)
+        if (!hasRet) {
+          // Perfis somente vendas
+          html += '<div class="grid kpis">';
+          html += kpi('Vendas', d.cards.vendas, 'Meta: ' + d.cards.metaVendas + ' · Restam ' + d.cards.restanteVendas);
+          html += kpi('Comissão', BRL(d.cards.comissao), 'calculada automaticamente', 'ok');
+          html += kpi('Progresso da meta', d.cards.progressoVendas + '%', progressBar(d.cards.progressoVendas),
+            d.cards.progressoVendas >= 100 ? 'ok' : d.cards.progressoVendas >= 60 ? '' : 'warn');
+          html += '</div>';
+        } else {
+          // Perfis com retenção: vendas em quantidade + %s de
+          // retenção POR PRODUTO (cada uma contra a própria meta),
+          // e ao final UM bloco de comissão com progresso de vendas.
+          const r = d.retencao;
+          const okCartao = r.cartao.pctRetidos >= d.cards.metaRetencaoCartao;
+          const okConta = r.conta.pctRetidos >= d.cards.metaRetencaoConta;
+          html += '<div class="grid kpis">';
+          html += kpi('Vendas', d.cards.vendas, 'Meta: ' + d.cards.metaVendas + ' · Restam ' + d.cards.restanteVendas);
+          html += kpi('% Retenção Cartão', r.cartao.pctRetidos + '% <span class="kpi-sub">retidos · ' + r.cartao.pctArgumentacao + '% por arg.</span>',
+            'Meta: ' + d.cards.metaRetencaoCartao + '% · ' + r.cartao.retidos + ' de ' + r.cartao.atendidos, okCartao ? 'ok' : 'warn');
+          html += kpi('% Retenção Conta', r.conta.pctRetidos + '%',
+            'Meta: ' + d.cards.metaRetencaoConta + '% · ' + r.conta.retidos + ' de ' + r.conta.atendidos, okConta ? 'ok' : 'warn');
+          html += kpi('% Cashback', r.cashback.pctCashback + '%',
+            r.cashback.cashback + ' de ' + r.cashback.atendidos + ' · Milhas ' + r.cashback.pctMilhas + '%', 'ok');
+          html += '</div>';
+
+          // Bloco final: comissão do mês + progresso da meta de vendas
+          html += '<div class="card" style="margin-top:16px">' +
+            '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:8px">' +
+            '<h3 style="margin:0">Comissão do mês</h3>' +
+            '<span class="muted">Vendas ' + BRL(d.comissao.totalVendas) + ' · Retenção ' + BRL(d.comissao.totalRetencao) + '</span></div>' +
+            '<div class="kpi-value" style="margin-top:6px">' + BRL(d.comissao.total) + '</div>' +
+            '<p class="muted" style="margin-top:8px">Meta de vendas: ' + d.cards.progressoVendas + '% atingido</p>' +
+            progressBar(d.cards.progressoVendas) + '</div>';
+        }
+
+        // Gráfico de evolução diária
+        html += '<h2 class="section-title">Evolução diária</h2><div class="card"><div class="chart-box"><canvas id="chDaily"></canvas></div></div>';
+
+        // Tabelas
+        html += '<div class="grid two" style="margin-top:16px">';
+        html += '<div class="card"><h3>Vendas por produto</h3>' +
+          table(['Produto', 'Quantidade'], d.vendasPorProduto.map(function (p) {
+            return '<tr><td>' + esc(p.produto) + '</td><td><strong>' + p.quantidade + '</strong></td></tr>';
+          })) + '</div>';
+        html += '<div class="card"><h3>Vendas individuais</h3>' +
+          table(['Data', 'CPF', 'Produto', 'Qtd'], d.vendasIndividuais.map(function (v) {
+            return '<tr><td>' + esc(v.data) + '</td><td>' + esc(v.cpf) + '</td><td>' + esc(v.produto) + '</td><td>' + v.quantidade + '</td></tr>';
+          })) + '</div>';
+        html += '</div>';
+
+        if (hasRet) {
+          html += '<div class="grid two" style="margin-top:16px">';
+          html += '<div class="card"><h3>Massificados retidos</h3>' +
+            table(['Data', 'CPF', 'Produto', 'Tipo'], d.massificadosRetidos.map(function (m) {
+              return '<tr><td>' + esc(m.data) + '</td><td>' + esc(m.cpf) + '</td><td>' + esc(m.produto) +
+                '</td><td><span class="badge ok">' + esc(m.resultado) + '</span></td></tr>';
+            })) + '</div>';
+          html += '<div class="card"><h3>Retenção dia a dia — Cartão de Crédito</h3>' +
+            table(['Dia', 'Quantidade', '% Retenção'], d.tabelaDiariaCartao.map(function (t) {
+              return '<tr><td>' + esc(t.dia) + '</td><td>' + t.quantidade + '</td>' +
+                '<td><span class="badge ' + (t.pctRetencao >= 70 ? 'ok' : 'warn') + '">' + t.pctRetencao + '%</span></td></tr>';
+            }), 'Sem registros de Cartão no mês.') + '</div>';
+          html += '<div class="card"><h3>Retenção dia a dia — Conta Digital</h3>' +
+            table(['Dia', 'Quantidade', '% Retenção'], d.tabelaDiariaConta.map(function (t) {
+              return '<tr><td>' + esc(t.dia) + '</td><td>' + t.quantidade + '</td>' +
+                '<td><span class="badge ' + (t.pctRetencao >= 70 ? 'ok' : 'warn') + '">' + t.pctRetencao + '%</span></td></tr>';
+            }), 'Sem registros de Conta no mês.') + '</div>';
+          html += '</div>';
+        }
+
+        el.innerHTML = html;
+        lineChart('chDaily',
+          d.graficoDiario.map(function (x) { return x.dia; }),
+          hasRet
+            ? [{ label: 'Vendas', data: d.graficoDiario.map(function (x) { return x.vendas; }) },
+               { label: 'Retenções', data: d.graficoDiario.map(function (x) { return x.retencoes; }) }]
+            : [{ label: 'Vendas', data: d.graficoDiario.map(function (x) { return x.vendas; }) }]);
+      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+    },
+
+    /* ---------- NOVA VENDA ---------- */
+    novaVenda: function (el) {
+      const prods = state.session.products.filter(function (p) { return String(p.ativo) !== 'Não'; });
+      el.innerHTML =
+        '<div class="card" style="max-width:640px">' +
+        '<h3>Registrar venda</h3>' +
+        '<form id="fVenda"><div class="form-grid">' +
+        '<div><label>Data *</label><input type="date" name="data" required value="' + todayLocal() + '"></div>' +
+        '<div><label>CPF *</label><input name="cpf" required inputmode="numeric" maxlength="14" placeholder="000.000.000-00"></div>' +
+        '<div><label>Produto *</label><select name="produto" required>' +
+        prods.map(function (p) { return '<option>' + esc(p.nome) + '</option>'; }).join('') + '</select></div>' +
+        '<div><label>Quantidade *</label><input type="number" name="quantidade" min="1" value="1" required></div>' +
+        '<div class="full"><label>Observação (opcional)</label><textarea name="obs" rows="2"></textarea></div>' +
+        '</div><div class="form-actions"><button class="btn" type="submit">Cadastrar venda</button></div></form></div>';
+
+      bindForm('fVenda', 'sales.create', 'Venda cadastrada com sucesso!');
+    },
+
+    /* ---------- NOVA RETENÇÃO ---------- */
+    novaRetencao: function (el) {
+      const rp = state.session.retentionProducts;
+      el.innerHTML =
+        '<div class="card" style="max-width:640px">' +
+        '<h3>Registrar retenção</h3>' +
+        '<form id="fRet"><div class="form-grid">' +
+        '<div><label>Data *</label><input type="date" name="data" required value="' + todayLocal() + '"></div>' +
+        '<div><label>CPF *</label><input name="cpf" required inputmode="numeric" maxlength="14" placeholder="000.000.000-00"></div>' +
+        '<div><label>Produto *</label><select name="produto" id="retProd" required>' +
+        Object.keys(rp).map(function (p) { return '<option>' + esc(p) + '</option>'; }).join('') + '</select></div>' +
+        '<div><label>Resultado *</label><select name="resultado" id="retRes" required></select></div>' +
+        '<div class="full"><label>OBS (opcional)</label><textarea name="obs" rows="2"></textarea></div>' +
+        '</div><div class="form-actions"><button class="btn" type="submit">Cadastrar retenção</button></div></form></div>';
+
+      const prodSel = document.getElementById('retProd');
+      const resSel = document.getElementById('retRes');
+      function fillResults() {
+        resSel.innerHTML = rp[prodSel.value].map(function (r) { return '<option>' + esc(r) + '</option>'; }).join('');
+      }
+      prodSel.addEventListener('change', fillResults);
+      fillResults();
+      bindForm('fRet', 'retention.create', 'Retenção cadastrada com sucesso!');
+    },
+
+    /* ---------- EQUIPE (anonimizada) ---------- */
+    equipe: function (el) {
+      cached('team', { mes: state.month }).then(function (t) {
+        const hasRet = state.session.permissions.pages.indexOf('novaRetencao') !== -1;
+        let html = '<div class="grid kpis">';
+        html += kpi('Total da equipe', t.totalEquipe, 'vendas no mês');
+        html += kpi('Membros', t.totalMembros, 'na equipe');
+        html += '</div>';
+
+        html += '<div class="grid two" style="margin-top:16px">';
+        html += '<div class="card"><h3>Vendas por produto (equipe)</h3>' +
+          table(['Produto', 'Quantidade'], t.vendasPorProduto.map(function (p) {
+            return '<tr><td>' + esc(p.produto) + '</td><td><strong>' + p.quantidade + '</strong></td></tr>';
+          })) + '</div>';
+        html += '<div class="card"><h3>Vendas dos colegas</h3><p class="muted" style="margin-bottom:8px">Sem identificação nominal.</p>' +
+          table(['', 'Quantidade'], t.vendasAnonimas.map(function (v) {
+            return '<tr class="' + (v.propria ? 'me' : '') + '"><td>' + (v.propria ? 'Você' : esc(v.rotulo)) + '</td><td>' + v.quantidade + '</td></tr>';
+          })) + '</div></div>';
+
+        if (hasRet) {
+          html += '<h2 class="section-title">Retenção da equipe</h2>';
+          html += '<div class="grid kpis">';
+          html += '<div class="card"><h3>Cartão de Crédito</h3><div class="chart-box" style="height:210px"><canvas id="pzCartao"></canvas></div></div>';
+          html += '<div class="card"><h3>Conta Digital</h3><div class="chart-box" style="height:210px"><canvas id="pzConta"></canvas></div></div>';
+          html += '<div class="card"><h3>Cashback</h3><div class="chart-box" style="height:210px"><canvas id="pzCash"></canvas></div></div>';
+          html += '</div>';
+          html += '<div class="card" style="margin-top:16px"><h3>Atendidos por membro</h3>' +
+            '<p class="muted" style="margin-bottom:8px">Sem identificação nominal.</p>' +
+            table(['', 'Cartão (atend.)', '% Ret. Cartão', 'Conta (atend.)', '% Ret. Conta'], t.retencaoAnonima.map(function (r) {
+              return '<tr class="' + (r.propria ? 'me' : '') + '"><td>' + (r.propria ? 'Você' : esc(r.rotulo)) + '</td>' +
+                '<td>' + r.atendidosCartao + '</td>' +
+                '<td><span class="badge ' + (r.pctCartao >= 70 ? 'ok' : 'warn') + '">' + r.pctCartao + '%</span></td>' +
+                '<td>' + r.atendidosConta + '</td>' +
+                '<td><span class="badge ' + (r.pctConta >= 70 ? 'ok' : 'warn') + '">' + r.pctConta + '%</span></td></tr>';
+            })) + '</div>';
+        }
+
+        el.innerHTML = html;
+        if (hasRet) {
+          const p = t.pizza;
+          pieChart('pzCartao', ['Retidos', 'Argumentados', 'Cancelados'],
+            [Math.max(0, p.cartao.retidos - p.cartao.argumentados), p.cartao.argumentados, p.cartao.cancelados],
+            [css('--ok'), css('--accent'), css('--bad')]);
+          pieChart('pzConta', ['Retidos', 'Cancelados'], [p.conta.retidos, p.conta.cancelados], [css('--ok'), css('--bad')]);
+          pieChart('pzCash', ['Cashback', 'Milhas'], [p.cashback.cashback, p.cashback.milhas], [css('--ok'), css('--warn')]);
+        }
+      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+    },
+
+    /* ---------- RANKING ---------- */
+    ranking: function (el) {
+      cached('ranking', { mes: state.month }).then(function (r) {
+        const medals = ['🥇', '🥈', '🥉'];
+        let html = '';
+        if (r.minhaPosicao) html += '<div class="grid kpis">' + kpi('Sua posição', '#' + r.minhaPosicao, 'no ranking do mês', 'ok') + '</div>';
+        html += '<div class="card" style="margin-top:16px"><h3>TOP 10 · ' + esc(r.mes) + '</h3>' +
+          table(['#', 'Atendente', 'Equipe', 'Vendas', '% Ret. Cartão', '% Ret. Conta'], r.top10.map(function (x) {
+            return '<tr class="' + (x.propria ? 'me' : '') + '"><td class="pos-medal">' + (medals[x.posicao - 1] || x.posicao) + '</td>' +
+              '<td>' + esc(x.nome) + '</td><td>' + esc(x.equipe) + '</td><td><strong>' + x.vendas + '</strong></td>' +
+              '<td><span class="badge ' + (x.pctCartao >= 70 ? 'ok' : 'neutral') + '">' + x.pctCartao + '%</span></td>' +
+              '<td><span class="badge ' + (x.pctConta >= 70 ? 'ok' : 'neutral') + '">' + x.pctConta + '%</span></td></tr>';
+          }), 'Sem dados suficientes para o ranking.') + '</div>';
+        el.innerHTML = html;
+      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+    },
+
+    /* ---------- GESTÃO DA EQUIPE ---------- */
+    gestao: function (el) {
+      cached('users.list').then(function (users) {
+        let html = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
+          '<h3 style="margin:0">Membros da equipe</h3>' +
+          '<button class="btn small" onclick="App.userForm()">+ Cadastrar membro</button></div>' +
+          table(['Nome', 'Email', 'Cargo', 'Status', 'Ações'], users.map(function (u) {
+            return '<tr><td><strong>' + esc(u.nome) + '</strong><br><small class="muted">' + esc(u.equipe) + '</small></td>' +
+              '<td>' + esc(u.email) + '</td><td>' + esc(u.cargo) + '</td>' +
+              '<td><span class="badge ' + (u.status === 'Ativo' ? 'ok' : 'neutral') + '">' + esc(u.status) + '</span></td>' +
+              '<td style="white-space:nowrap">' +
+              '<button class="btn small ghost" onclick="App.userIndicators(\'' + u.id + '\')">📈</button> ' +
+              '<button class="btn small ghost" onclick="App.userForm(\'' + u.id + '\')">✏️</button> ' +
+              '<button class="btn small ghost" onclick="App.goalForm(\'' + u.id + '\',\'' + esc(u.nome) + '\')">🎯</button> ' +
+              '<button class="btn small danger" onclick="App.userDelete(\'' + u.id + '\',\'' + esc(u.nome) + '\')">🗑</button></td></tr>';
+          })) + '</div>';
+        html += '<div class="card" style="margin-top:16px"><h3>Meta da equipe</h3>' +
+          '<p class="muted">Defina a meta mensal aplicada aos membros sem meta individual.</p>' +
+          '<button class="btn small" style="margin-top:10px" onclick="App.goalForm(null,\'' + esc(state.session.user.equipe) + '\')">Alterar meta da equipe</button></div>';
+        el.innerHTML = html;
+      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+    },
+
+    /* ---------- RELATÓRIOS ---------- */
+    relatorios: function (el) {
+      const tipos = state.session.reportTypes;
+      el.innerHTML = '<div class="card" style="max-width:560px"><h3>Solicitar relatório</h3>' +
+        '<p class="muted">O relatório é gerado do mês selecionado no topo e baixado em CSV (abre no Excel/Sheets).</p>' +
+        '<div class="pill-list" style="margin-top:14px">' +
+        tipos.map(function (t) { return '<button class="btn ghost" onclick="App.report(\'' + t + '\')">📄 ' + t + '</button>'; }).join('') +
+        '</div></div>';
+    },
+
+    /* ---------- CADASTRO (ADMIN) ---------- */
+    cadastro: function (el) {
+      Promise.all([cached('users.list'), cached('session', {}, true)]).then(function (res) {
+        state.session = res[1];
+        const teams = state.session.teams;
+        let html = '<div class="grid two">';
+        html += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Usuários</h3>' +
+          '<button class="btn small" onclick="App.userForm()">+ Novo usuário</button></div>' +
+          '<p class="muted" style="margin-top:6px">Todos os usuários cadastrados. A exclusão remove PERMANENTEMENTE a linha da planilha.</p>' +
+          table(['Nome', 'Equipe', 'E-mail', 'Cargo', 'Ações'], res[0].map(function (u) {
+            return '<tr><td><strong>' + esc(u.nome) + '</strong></td><td>' + esc(u.equipe) + '</td>' +
+              '<td>' + esc(u.email) + '</td><td>' + esc(u.cargo) + '</td>' +
+              '<td style="white-space:nowrap">' +
+              '<button class="btn small ghost" onclick=\'App.userForm(' + JSON.stringify(u) + ')\' title="Editar">✏️</button> ' +
+              '<button class="btn small danger" onclick="App.userDelete(\'' + u.id + '\',\'' + esc(u.nome) + '\')" title="Excluir permanentemente">🗑</button></td></tr>';
+          }), 'Nenhum usuário cadastrado.') + '</div>';
+        html += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Equipes</h3>' +
+          '<button class="btn small" onclick="App.teamForm()">+ Nova equipe</button></div>' +
+          table(['Equipe', 'Tipo', 'Ações'], teams.map(function (t) {
+            return '<tr><td><strong>' + esc(t.nome) + '</strong></td><td>' + esc(t.tipo) + '</td>' +
+              '<td><button class="btn small ghost" onclick=\'App.teamForm(' + JSON.stringify(t) + ')\'>✏️</button> ' +
+              '<button class="btn small danger" onclick="App.teamDelete(\'' + t.id + '\')">🗑</button></td></tr>';
+          }), 'Nenhuma equipe cadastrada.') + '</div>';
+        html += '</div>';
+        el.innerHTML = html;
+      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+    },
+
+    /* ---------- CONFIGURAÇÕES (ADMIN) ---------- */
+    configuracoes: function (el) {
+      Promise.all([cached('settings.list'), cached('session', {}, true)]).then(function (res) {
+        const settings = res[0]; state.session = res[1];
+        const prods = state.session.products;
+        let html = '<div class="card"><h3>Parâmetros e comissões</h3>' +
+          '<p class="muted">Regras de comissão, metas padrão e parâmetros — tudo editável aqui, sem abrir o Sheets.</p>';
+        settings.filter(function (s) { return String(s.chave).indexOf('sistema.') !== 0; }).forEach(function (s) {
+          const eid = 'set_' + btoa(s.chave).replace(/[^a-zA-Z0-9]/g, '');
+          html += '<div class="setting-item">' +
+            '<div class="setting-head"><div><strong>' + esc(s.descricao || s.chave) + '</strong><small>' + esc(s.chave) + '</small></div>' +
+            '<button class="btn small" onclick="App.saveSetting(\'' + esc(s.chave) + '\',\'' + eid + '\')">Salvar</button></div>' +
+            settingEditor(s, eid) + '</div>';
+        });
+        html += '</div>';
+
+        html += '<div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center">' +
+          '<h3 style="margin:0">Produtos de venda</h3><button class="btn small" onclick="App.productForm()">+ Novo produto</button></div>' +
+          table(['Produto', 'Comissão unitária', 'Ativo', 'Ações'], prods.map(function (p) {
+            return '<tr><td><strong>' + esc(p.nome) + '</strong></td><td>' + BRL(parseFloat(p.comissaoUnitaria)) + '</td>' +
+              '<td><span class="badge ' + (p.ativo === 'Sim' ? 'ok' : 'neutral') + '">' + esc(p.ativo) + '</span></td>' +
+              '<td><button class="btn small ghost" onclick=\'App.productForm(' + JSON.stringify(p) + ')\'>✏️</button> ' +
+              '<button class="btn small danger" onclick="App.productDelete(\'' + p.id + '\')">🗑</button></td></tr>';
+          })) + '</div>';
+
+        // Auditoria: arquivamento em nova planilha a cada 30 dias
+        html += '<div class="card" style="margin-top:16px">' +
+          '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px">' +
+          '<div><h3 style="margin:0">Auditoria</h3>' +
+          '<p class="muted" id="auditInfo" style="margin-top:4px">Carregando situação…</p></div>' +
+          '<button class="btn small ghost" onclick="App.auditRotate()">Arquivar agora</button></div>' +
+          '<p class="muted" style="margin-top:8px">Os registros com mais de 30 dias são movidos para uma nova planilha ' +
+          '(nada é perdido) e a principal fica leve. Para o arquivamento automático, execute uma única vez a função ' +
+          '<span class="mono">auditRotationInstall()</span> no editor do Apps Script.</p></div>';
+
+        el.innerHTML = html;
+        api('audit.status', {}).then(function (a) {
+          const u = a.ultimaRotacao;
+          document.getElementById('auditInfo').innerHTML =
+            a.linhasAtuais + ' registro(s) na planilha principal · mantidos ' + a.manterDias + ' dias' +
+            (u ? ' · último arquivo: <a href="' + esc(u.url) + '" target="_blank" rel="noopener">' + esc(u.nome) + '</a>' : ' · nenhum arquivamento ainda');
+        }).catch(function () { document.getElementById('auditInfo').textContent = ''; });
+      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+    }
+  };
+
+  // ------------------ Formulários e ações ------------------
+
+  /** Liga um <form> a uma action da API, com toast e refresh. */
+  /** Data de hoje 'yyyy-MM-dd' no fuso LOCAL do usuário (não UTC). */
+  function todayLocal() {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+
+  function bindForm(formId, action, successMsg) {
+    const form = document.getElementById(formId);
+    let inflight = false; // trava: cada envio conta UMA vez (bloqueia duplo clique/Enter)
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      if (inflight) return;
+      inflight = true;
+      const btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      const payload = {};
+      new FormData(form).forEach(function (v, k) { payload[k] = v; });
+      if (payload.cpf) payload.cpf = payload.cpf.replace(/\D/g, '');
+      api(action, payload).then(function () {
+        toast(successMsg);
+        invalidate();          // atualização imediata: limpa cache de cliente
+        form.reset();
+        const dt = form.querySelector('input[type=date]');
+        if (dt) dt.value = todayLocal();
+        inflight = false; btn.disabled = false;
+      }).catch(function (e) { toast(e.message, true); inflight = false; btn.disabled = false; });
+    });
+  }
+
+  /** Modal de criação/edição de usuário. */
+  function userForm(id) {
+    const me = state.session.user;
+    const isAdmin = me.cargo === 'ADMIN';
+    const roles = isAdmin ? state.session.roles
+      : state.session.roles.filter(function (r) { return r.indexOf('Atendente') === 0; });
+
+    const done = function (u) {
+      u = u || {};
+      openModal(id ? 'Editar usuário' : 'Cadastrar usuário',
+        '<form id="fUser"><div class="form-grid">' +
+        '<div class="full"><label>Nome *</label><input name="nome" required value="' + esc(u.nome) + '"></div>' +
+        '<div class="full"><label>Email *</label><input type="email" name="email" required value="' + esc(u.email) + '"></div>' +
+        '<div><label>Cargo *</label><select name="cargo">' +
+        roles.map(function (r) { return '<option ' + (u.cargo === r ? 'selected' : '') + '>' + esc(r) + '</option>'; }).join('') + '</select></div>' +
+        '<div><label>Status</label><select name="status"><option ' + (u.status === 'Ativo' ? 'selected' : '') + '>Ativo</option>' +
+        '<option ' + (u.status === 'Inativo' ? 'selected' : '') + '>Inativo</option></select></div>' +
+        (isAdmin ? '<div class="full"><label>Equipe</label><input name="equipe" value="' + esc(u.equipe || '') + '"></div>' : '') +
+        '</div><div class="form-actions"><button class="btn ghost" type="button" onclick="App.closeModal()">Cancelar</button>' +
+        '<button class="btn" type="submit">Salvar</button></div></form>');
+
+      document.getElementById('fUser').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const payload = {}; new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
+        if (id) payload.id = id;
+        api(id ? 'users.update' : 'users.create', payload).then(function () {
+          toast(id ? 'Alterações salvas!' : 'Usuário cadastrado com sucesso!');
+          closeModal(); invalidate(); go(state.page);
+        }).catch(function (e) { toast(e.message, true); });
+      });
+    };
+
+    if (id) {
+      cached('users.list').then(function (users) {
+        done(users.find(function (u) { return String(u.id) === String(id); }));
+      });
+    } else done();
+  }
+
+  /** Exclusão definitiva de usuário (com confirmação). */
+  function userDelete(id, nome) {
+    openModal('Excluir usuário',
+      '<p>Excluir <strong>' + esc(nome) + '</strong> definitivamente? A linha será removida da planilha.</p>' +
+      '<div class="form-actions"><button class="btn ghost" onclick="App.closeModal()">Cancelar</button>' +
+      '<button class="btn danger" id="btnDelU">Excluir definitivamente</button></div>');
+    document.getElementById('btnDelU').addEventListener('click', function () {
+      api('users.delete', { id: id }).then(function () {
+        toast('Usuário excluído!'); closeModal(); invalidate(); go(state.page);
+      }).catch(function (e) { toast(e.message, true); });
+    });
+  }
+
+  /** Indicadores individuais de um membro. */
+  function userIndicators(id) {
+    openModal('Indicadores individuais', '<div class="empty">Carregando…</div>');
+    api('users.indicators', { id: id, mes: state.month }).then(function (d) {
+      const c = d.dashboard.cards, r = d.dashboard.retencao;
+      document.getElementById('modalBody').innerHTML =
+        '<p class="muted" style="margin-bottom:12px"><strong>' + esc(d.user.nome) + '</strong> · ' + esc(d.user.cargo) + ' · ' + esc(d.dashboard.mes) + '</p>' +
+        '<div class="grid kpis">' +
+        kpi('Vendas', c.vendas, 'Meta: ' + c.metaVendas) +
+        kpi('Comissão', BRL(d.comissao.total), 'calculada automaticamente', 'ok') +
+        kpi('% Ret. Cartão', r.cartao.pctRetidos + '%', 'Meta: ' + c.metaRetencaoCartao + '% · ' + r.cartao.atendidos + ' atendidos') +
+        kpi('% Ret. Conta', r.conta.pctRetidos + '%', 'Meta: ' + c.metaRetencaoConta + '% · ' + r.conta.atendidos + ' atendidos') +
+        '</div>' +
+        (d.comissao.cartao.detalhes.length
+          ? '<p class="muted" style="margin-top:12px">Composição: ' + d.comissao.cartao.detalhes.map(esc).join(' · ') + '</p>' : '');
+    }).catch(function (e) { toast(e.message, true); closeModal(); });
+  }
+
+  /** Modal de meta (individual ou da equipe). */
+  function goalForm(userId, nome) {
+    openModal('Definir meta — ' + esc(nome),
+      '<form id="fGoal"><div class="form-grid">' +
+      '<div><label>Meta de vendas (quantidade)</label><input type="number" name="metaVendas" min="0" step="1" value="50"></div>' +
+      '<div><label>Meta retenção Cartão (%)</label><input type="number" name="metaRetencaoCartao" min="0" max="100" value="75"></div>' +
+      '<div><label>Meta retenção Conta (%)</label><input type="number" name="metaRetencaoConta" min="0" max="100" value="75"></div>' +
+      '<div><label>Mês</label><input type="month" name="mes" value="' + state.month + '"></div>' +
+      '</div><div class="form-actions"><button class="btn ghost" type="button" onclick="App.closeModal()">Cancelar</button>' +
+      '<button class="btn" type="submit">Salvar meta</button></div></form>');
+    document.getElementById('fGoal').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      const payload = { tipo: userId ? 'user' : 'team', alvoId: userId || state.session.user.equipe };
+      new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
+      api('goals.set', payload).then(function () {
+        toast('Meta alterada!'); closeModal(); invalidate();
+      }).catch(function (e) { toast(e.message, true); });
+    });
+  }
+
+  /** Gera e baixa relatório CSV. */
+  function report(tipo) {
+    toast('Relatório solicitado! Gerando…');
+    api('reports.generate', { tipo: tipo, mes: state.month }).then(function (r) {
+      const blob = new Blob([r.csv], { type: 'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = r.filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('Relatório "' + tipo + '" pronto para download!');
+    }).catch(function (e) { toast(e.message, true); });
+  }
+
+  /** Salvar configuração individual (ADMIN). */
+  // ---- Editor amigável de parâmetros (nunca exibe JSON cru) ----
+  // Rótulos das colunas para regras em formato de lista de faixas.
+  const SETTING_LABELS = {
+    pct: '% a partir de', valor: 'Prêmio (R$)', min: '% mín.', max: '% máx.',
+    retidos: '% retidos', argumentacao: '% argumentação'
+  };
+  // Cabeçalhos das tabelas produto × faixa (R$ por venda/retido).
+  const SETTING_COLS = {
+    'comissao.vendas.tabela': ['Até 60%', '60–79,99%', '80–100%', 'Acima de 100%'],
+    'comissao.massificados.arg': ['Conv. 15%', 'Conv. 30%', 'Conv. 50%', 'Conv. 60%'],
+    'comissao.massificados.inc': ['Conv. 60%', 'Conv. 65%', 'Conv. 70%', 'Conv. 75%']
+  };
+
+  /** Detecta o formato do valor e devolve o editor adequado. */
+  function settingEditor(s, eid) {
+    let v = null;
+    try { v = JSON.parse(s.valor); } catch (e) { /* texto/número simples */ }
+
+    // Lista de faixas: [{pct, valor}, ...] e variações
+    if (Array.isArray(v) && v.length && typeof v[0] === 'object') {
+      const keys = Object.keys(v[0]);
+      return '<div id="' + eid + '" class="setting-editor" data-shape="rows" data-keys="' + keys.join(',') + '">' +
+        '<div class="table-wrap"><table><thead><tr>' +
+        keys.map(function (k) { return '<th>' + esc(SETTING_LABELS[k] || k) + '</th>'; }).join('') +
+        '</tr></thead><tbody>' +
+        v.map(function (row) {
+          return '<tr>' + keys.map(function (k) {
+            return '<td><input type="number" step="any" data-k="' + k + '" value="' + esc(row[k]) + '"></td>';
+          }).join('') + '</tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }
+
+    // Lista de números: faixas de conversão [15, 30, 50, 60]
+    if (Array.isArray(v) && v.every(function (n) { return typeof n === 'number'; })) {
+      return '<div id="' + eid + '" class="setting-editor nums" data-shape="nums">' +
+        v.map(function (n, i) {
+          return '<label class="num-cell">Faixa ' + (i + 1) + ' (%)' +
+            '<input type="number" step="any" value="' + n + '"></label>';
+        }).join('') + '</div>';
+    }
+
+    // Mapa produto → valores por faixa: {"Guincho": [3, 3.5, 4, 5], ...}
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const nomes = Object.keys(v);
+      const nCols = (v[nomes[0]] || []).length;
+      const cols = SETTING_COLS[s.chave] ||
+        Array.from({ length: nCols }, function (_, i) { return 'Faixa ' + (i + 1); });
+      return '<div id="' + eid + '" class="setting-editor" data-shape="map">' +
+        '<div class="table-wrap"><table><thead><tr><th>Produto</th>' +
+        cols.map(function (c) { return '<th>' + esc(c) + ' (R$)</th>'; }).join('') +
+        '</tr></thead><tbody>' +
+        nomes.map(function (nome) {
+          return '<tr data-name="' + esc(nome) + '"><td><strong>' + esc(nome) + '</strong></td>' +
+            (v[nome] || []).map(function (n) {
+              return '<td><input type="number" step="any" value="' + n + '"></td>';
+            }).join('') + '</tr>';
+        }).join('') + '</tbody></table></div></div>';
+    }
+
+    // Texto/número simples
+    return '<div id="' + eid + '" class="setting-editor" data-shape="plain">' +
+      '<input value="' + esc(s.valor) + '"></div>';
+  }
+
+  /** Lê o editor e salva no formato que o servidor entende. */
+  function saveSetting(chave, edId) {
+    const ed = document.getElementById(edId);
+    const shape = ed.dataset.shape;
+    let valor;
+
+    if (shape === 'rows') {
+      const keys = ed.dataset.keys.split(',');
+      valor = JSON.stringify(Array.prototype.map.call(ed.querySelectorAll('tbody tr'), function (tr) {
+        const obj = {};
+        keys.forEach(function (k) {
+          obj[k] = parseFloat(tr.querySelector('input[data-k="' + k + '"]').value) || 0;
+        });
+        return obj;
+      }));
+    } else if (shape === 'nums') {
+      valor = JSON.stringify(Array.prototype.map.call(ed.querySelectorAll('input'), function (i) {
+        return parseFloat(i.value) || 0;
+      }));
+    } else if (shape === 'map') {
+      const obj = {};
+      ed.querySelectorAll('tbody tr').forEach(function (tr) {
+        obj[tr.dataset.name] = Array.prototype.map.call(tr.querySelectorAll('input'), function (i) {
+          return parseFloat(i.value) || 0;
+        });
+      });
+      valor = JSON.stringify(obj);
+    } else {
+      valor = ed.querySelector('input').value;
+    }
+
+    api('settings.update', { chave: chave, valor: valor }).then(function () {
+      toast('Alterações salvas!'); invalidate();
+    }).catch(function (e) { toast(e.message, true); });
+  }
+
+  /** Arquiva a auditoria agora (ADMIN). */
+  function auditRotate() {
+    api('audit.rotate', {}).then(function (r) {
+      if (!r.linhas) { toast('Nada a arquivar: não há registros com mais de 30 dias.'); return; }
+      openModal('Auditoria arquivada',
+        '<p><strong>' + r.linhas + '</strong> registro(s) movidos para a nova planilha:</p>' +
+        '<p style="margin-top:8px"><a class="btn small ghost" href="' + esc(r.url) + '" target="_blank" rel="noopener">Abrir ' + esc(r.nome) + '</a></p>');
+      invalidate(); go('configuracoes');
+    }).catch(function (e) { toast(e.message, true); });
+  }
+
+
+  /** Modal de produto (ADMIN). */
+  function productForm(p) {
+    p = p || {};
+    openModal(p.id ? 'Editar produto' : 'Novo produto',
+      '<form id="fProd"><div class="form-grid">' +
+      '<div class="full"><label>Nome *</label><input name="nome" required value="' + esc(p.nome) + '"></div>' +
+      '<div><label>Comissão unitária (R$)</label><input type="number" step="0.01" min="0" name="comissaoUnitaria" value="' + esc(p.comissaoUnitaria || 0) + '"></div>' +
+      '<div><label>Ativo</label><select name="ativo"><option ' + (p.ativo !== 'Não' ? 'selected' : '') + '>Sim</option><option ' + (p.ativo === 'Não' ? 'selected' : '') + '>Não</option></select></div>' +
+      '</div><div class="form-actions"><button class="btn ghost" type="button" onclick="App.closeModal()">Cancelar</button>' +
+      '<button class="btn" type="submit">Salvar</button></div></form>');
+    document.getElementById('fProd').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      const payload = { id: p.id, categoria: 'Massificado' };
+      new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
+      api('products.save', payload).then(function () {
+        toast('Alterações salvas!'); closeModal(); invalidate(); go('configuracoes');
+      }).catch(function (e) { toast(e.message, true); });
+    });
+  }
+  function productDelete(id) {
+    api('products.delete', { id: id }).then(function () {
+      toast('Produto excluído!'); invalidate(); go('configuracoes');
+    }).catch(function (e) { toast(e.message, true); });
+  }
+
+  /** Modal de equipe (ADMIN). */
+  function teamForm(t) {
+    t = t || {};
+    openModal(t.id ? 'Editar equipe' : 'Nova equipe',
+      '<form id="fTeam"><div class="form-grid">' +
+      '<div class="full"><label>Nome *</label><input name="nome" required value="' + esc(t.nome) + '"></div>' +
+      '<div class="full"><label>Tipo</label><select name="tipo">' +
+      ['Vendas', 'Retenção e vendas fone', 'Vendas e retenção digital'].map(function (x) {
+        return '<option ' + (t.tipo === x ? 'selected' : '') + '>' + x + '</option>';
+      }).join('') + '</select></div>' +
+      '</div><div class="form-actions"><button class="btn ghost" type="button" onclick="App.closeModal()">Cancelar</button>' +
+      '<button class="btn" type="submit">Salvar</button></div></form>');
+    document.getElementById('fTeam').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      const payload = { id: t.id };
+      new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
+      api('teams.save', payload).then(function () {
+        toast('Alterações salvas!'); closeModal(); invalidate(); go('cadastro');
+      }).catch(function (e) { toast(e.message, true); });
+    });
+  }
+  function teamDelete(id) {
+    api('teams.delete', { id: id }).then(function () {
+      toast('Equipe excluída!'); invalidate(); go('cadastro');
+    }).catch(function (e) { toast(e.message, true); });
+  }
+
+  // ------------------ Público ------------------
+  document.addEventListener('DOMContentLoaded', boot);
+  return {
+    closeModal: closeModal, userForm: userForm, userDelete: userDelete,
+    userIndicators: userIndicators, goalForm: goalForm, report: report,
+    saveSetting: saveSetting, auditRotate: auditRotate, productForm: productForm, productDelete: productDelete,
+    teamForm: teamForm, teamDelete: teamDelete
+  };
+})();
+</script>
