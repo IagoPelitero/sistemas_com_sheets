@@ -1,682 +1,123 @@
-<script>
-/* ============================================================
-   PortoBank Performance — App.html (JavaScript da SPA)
-   ------------------------------------------------------------
-   - Uma única API (google.script.run → api(action, payload))
-   - Cache de cliente por página+mês (atualizado após escrita)
-   - Renderização condicionada às permissões do usuário
-   - Toasts de sucesso em toda operação
-   - 4 temas dinâmicos com preferência persistida
-   ============================================================ */
-const App = (function () {
-  'use strict';
+/**
+ * ============================================================
+ * PortoBank Performance — Retention.gs
+ * ------------------------------------------------------------
+ * Registro e consulta de retenções.
+ * Produtos e resultados válidos (ver RETENTION_PRODUCTS):
+ *   Cartão de Crédito     → Retido | Cancelado | Retido por Argumentação
+ *   Conta Digital         → Retido | Cancelado
+ *   Cashback              → Cashback | Milhas
+ *   Massificado - <prod>  → Retido por Argumentação | Retido por
+ *                           Incentivo | Cancelado
+ *   (produtos: Perda e Roubo, Identidade Protegida, Vida,
+ *    Martelinho, RE — conforme PDF 6.5)
+ * ============================================================
+ */
 
-  // ------------------ Estado ------------------
-  const state = {
-    session: null,          // {user, permissions, products, ...}
-    page: 'dashboard',
-    month: new Date().toISOString().slice(0, 7),
-    cache: {},              // cache de cliente: chave página:mês
-    charts: []              // instâncias Chart.js ativas
+/**
+ * Registra uma nova retenção.
+ * @param {Object} me
+ * @param {Object} data {data, cpf, produto, resultado, obs}
+ */
+function retentionCreate_(me, data) {
+  if (!data.data) throw new Error('Data é obrigatória.');
+  if (!isValidCpf_(data.cpf)) throw new Error('CPF inválido (11 dígitos).');
+
+  const results = RETENTION_PRODUCTS[data.produto];
+  if (!results) throw new Error('Produto de retenção inválido.');
+  if (results.indexOf(data.resultado) === -1) {
+    throw new Error('Resultado "' + data.resultado + '" não é válido para ' + data.produto + '.');
+  }
+
+  const ret = {
+    id: uid_(),
+    data: toDateKey_(data.data),
+    cpf: String(data.cpf).replace(/\D/g, ''),
+    produto: data.produto,
+    resultado: data.resultado,
+    obs: String(data.obs || '').trim(),
+    userId: me.id,
+    equipe: me.equipe,
+    criadoEm: nowIso_()
   };
+  appendRow_(SHEETS.RETENTION, ret);
+  audit_(me.email, 'RETENTION_CREATE', ret.produto + ' → ' + ret.resultado);
+  return ret;
+}
 
-  const PAGES = {
-    dashboard:     { title: 'Dashboard',        ico: '📊' },
-    novaVenda:     { title: 'Nova Venda',       ico: '🛒' },
-    novaRetencao:  { title: 'Nova Retenção',    ico: '🛡️' },
-    equipe:        { title: 'Equipe',           ico: '👥' },
-    ranking:       { title: 'Ranking',          ico: '🏆' },
-    gestao:        { title: 'Gestão da Equipe', ico: '🧭' },
-    relatorios:    { title: 'Relatórios',       ico: '📄' },
-    cadastro:      { title: 'Cadastro',         ico: '➕' },
-    configuracoes: { title: 'Configurações',    ico: '⚙️' }
-  };
-  const THEME_COLORS = { portobank: '#0B2440', rosa: '#D6336C', brasil: '#009739', dark: '#10151C' };
-  const BRL = function (v) { return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); };
+/**
+ * Retenções do mês por escopo.
+ * @param {Object} me
+ * @param {string} scope 'self' | 'team' | 'all'
+ * @param {string=} monthKey
+ */
+function retentionQuery_(me, scope, monthKey) {
+  const mk = monthKey || toMonthKey_(new Date());
+  return readAll_(SHEETS.RETENTION).filter(function (r) {
+    if (toMonthKey_(r.data) !== mk) return false;
+    if (scope === 'self') return String(r.userId) === String(me.id);
+    if (scope === 'team') return String(r.equipe) === String(me.equipe);
+    return true;
+  });
+}
 
-  // ------------------ API ------------------
-  /** Chama o servidor. Devolve Promise com data ou lança erro. */
-  function api(action, payload) {
-    return new Promise(function (resolve, reject) {
-      google.script.run
-        .withSuccessHandler(function (json) {
-          const res = JSON.parse(json);
-          res.ok ? resolve(res.data) : reject(new Error(res.error));
-        })
-        .withFailureHandler(function (e) { reject(e); })
-        .api(action, payload || {});
-    });
-  }
+/**
+ * Estatísticas de retenção por produto para um conjunto de linhas.
+ * @param {Object[]} rows
+ * @return {Object} métricas por produto
+ */
+function retentionStats_(rows) {
+  const byProduct = {};
+  Object.keys(RETENTION_PRODUCTS).forEach(function (p) {
+    byProduct[p] = { atendidos: 0, retidos: 0, argumentados: 0, incentivos: 0, cancelados: 0, cashback: 0, milhas: 0 };
+  });
+  rows.forEach(function (r) {
+    const s = byProduct[r.produto];
+    if (!s) return;
+    s.atendidos++;
+    if (r.resultado === 'Retido') s.retidos++;
+    if (r.resultado === 'Retido por Argumentação') { s.retidos++; s.argumentados++; }
+    if (r.resultado === 'Retido por Incentivo') { s.retidos++; s.incentivos++; }
+    if (r.resultado === 'Cancelado') s.cancelados++;
+    if (r.resultado === 'Cashback') s.cashback++;
+    if (r.resultado === 'Milhas') s.milhas++;
+  });
 
-  /** Busca com cache de cliente. `fresh=true` força ida ao servidor. */
-  function cached(action, payload, fresh) {
-    const key = action + ':' + JSON.stringify(payload || {});
-    if (!fresh && state.cache[key]) return Promise.resolve(state.cache[key]);
-    return api(action, payload).then(function (data) {
-      state.cache[key] = data;
-      return data;
-    });
-  }
+  const cc = byProduct['Cartão de Crédito'];
+  const cd = byProduct['Conta Digital'];
+  const cb = byProduct['Cashback'];
 
-  /** Invalida o cache do cliente (após qualquer escrita). */
-  function invalidate() { state.cache = {}; }
+  // Massificados: agrega todos os produtos "Massificado - *"
+  const ms = { atendidos: 0, retidos: 0, argumentados: 0, incentivos: 0, cancelados: 0 };
+  Object.keys(byProduct).forEach(function (p) {
+    if (p.indexOf(MASSIFICADO_PREFIX) !== 0) return;
+    const s = byProduct[p];
+    ms.atendidos += s.atendidos; ms.retidos += s.retidos;
+    ms.argumentados += s.argumentados; ms.incentivos += s.incentivos;
+    ms.cancelados += s.cancelados;
+  });
 
-  // ------------------ Toast & Modal ------------------
-  function toast(msg, isError) {
-    const el = document.createElement('div');
-    el.className = 'toast' + (isError ? ' error' : '');
-    el.innerHTML = '<span class="t-ico">' + (isError ? '⚠️' : '✅') + '</span><span>' + esc(msg) + '</span>';
-    document.getElementById('toasts').appendChild(el);
-    setTimeout(function () { el.classList.add('out'); setTimeout(function () { el.remove(); }, 260); }, 3200);
-  }
-
-  function openModal(title, bodyHtml) {
-    document.getElementById('modalTitle').textContent = title;
-    document.getElementById('modalBody').innerHTML = bodyHtml;
-    document.getElementById('modalBackdrop').classList.remove('hidden');
-  }
-  function closeModal() { document.getElementById('modalBackdrop').classList.add('hidden'); }
-
-  function esc(s) {
-    return String(s === undefined || s === null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
-
-  // ------------------ Boot ------------------
-  function boot() {
-    api('session').then(function (s) {
-      state.session = s;
-      applyTheme(s.user.tema || 'portobank', true);
-      buildShell();
-      document.getElementById('splash').classList.add('hidden');
-      document.getElementById('app').classList.remove('hidden');
-      go('dashboard');
-    }).catch(function (e) {
-      document.getElementById('splash').classList.add('hidden');
-      document.getElementById('deniedMsg').textContent = String(e.message || e).replace('ACCESS_DENIED: ', '');
-      document.getElementById('denied').classList.remove('hidden');
-    });
-  }
-
-  function buildShell() {
-    const s = state.session;
-    // Navegação conforme permissões
-    const nav = document.getElementById('nav');
-    nav.innerHTML = s.permissions.pages.map(function (p) {
-      return '<button class="nav-item" data-page="' + p + '"><span class="ico">' + PAGES[p].ico + '</span>' + PAGES[p].title + '</button>';
-    }).join('');
-    nav.addEventListener('click', function (ev) {
-      const btn = ev.target.closest('.nav-item');
-      if (btn) { go(btn.dataset.page); document.getElementById('sidebar').classList.remove('open'); }
-    });
-
-    // Usuário
-    document.getElementById('userName').textContent = s.user.nome;
-    document.getElementById('userRole').textContent = s.user.cargo;
-    document.getElementById('userAvatar').textContent = s.user.nome.slice(0, 2).toUpperCase();
-
-    // Temas
-    const row = document.getElementById('themeRow');
-    row.innerHTML = Object.keys(THEME_COLORS).map(function (t) {
-      return '<button class="theme-dot" data-t="' + t + '" style="background:' + THEME_COLORS[t] + '" title="' + t + '" aria-label="Tema ' + t + '"></button>';
-    }).join('');
-    row.addEventListener('click', function (ev) {
-      const b = ev.target.closest('.theme-dot');
-      if (b) applyTheme(b.dataset.t);
-    });
-
-    // Mês
-    const mp = document.getElementById('monthPicker');
-    mp.value = state.month;
-    mp.addEventListener('change', function () {
-      state.month = mp.value || state.month;
-      invalidate(); go(state.page);
-    });
-
-    // Menu mobile
-    document.getElementById('menuBtn').addEventListener('click', function () {
-      document.getElementById('sidebar').classList.toggle('open');
-    });
-  }
-
-  function applyTheme(t, silent) {
-    document.body.dataset.theme = t;
-    document.querySelectorAll('.theme-dot').forEach(function (d) {
-      d.classList.toggle('active', d.dataset.t === t);
-    });
-    if (!silent) {
-      api('users.theme', { tema: t }).then(function () { toast('Tema salvo!'); }).catch(function (e) { toast(e.message, true); });
-    }
-  }
-
-  // ------------------ Router ------------------
-  function go(page) {
-    if (state.session.permissions.pages.indexOf(page) === -1) page = 'dashboard';
-    state.page = page;
-    document.getElementById('pageTitle').textContent = PAGES[page].title;
-    document.querySelectorAll('.nav-item').forEach(function (b) {
-      b.classList.toggle('active', b.dataset.page === page);
-    });
-    state.charts.forEach(function (c) { c.destroy(); });
-    state.charts = [];
-    const el = document.getElementById('content');
-    el.innerHTML = '<div class="empty">Carregando…</div>';
-    RENDER[page](el);
-  }
-
-  // ------------------ Helpers de UI ------------------
-  function kpi(label, value, sub, cls) {
-    return '<div class="card kpi ' + (cls || '') + '"><div class="kpi-label">' + label + '</div>' +
-      '<div class="kpi-value">' + value + '</div>' + (sub ? '<div class="kpi-sub">' + sub + '</div>' : '') + '</div>';
-  }
-  function progressBar(pct) {
-    const p = Math.min(100, pct || 0);
-    return '<div class="progress' + (p >= 100 ? ' ok' : '') + '"><div style="width:' + p + '%"></div></div>';
-  }
-  function table(headers, rows, emptyMsg) {
-    if (!rows.length) return '<div class="empty">' + (emptyMsg || 'Sem registros neste mês.') + '</div>';
-    return '<div class="table-wrap"><table><thead><tr>' +
-      headers.map(function (h) { return '<th>' + h + '</th>'; }).join('') +
-      '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
-  }
-  function lineChart(canvasId, labels, datasets) {
-    const ctx = document.getElementById(canvasId);
-    if (!ctx) return;
-    const c = new Chart(ctx, {
-      type: 'line',
-      data: { labels: labels, datasets: datasets.map(function (d, i) {
-        return { label: d.label, data: d.data, tension: .35, fill: true,
-          borderColor: i === 0 ? css('--accent') : css('--ok'),
-          backgroundColor: 'transparent', pointRadius: 2 };
-      }) },
-      options: { responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { labels: { color: css('--ink-2') } } },
-        scales: { x: { ticks: { color: css('--ink-2') }, grid: { display: false } },
-                  y: { ticks: { color: css('--ink-2') }, grid: { color: css('--line') }, beginAtZero: true } } }
-    });
-    state.charts.push(c);
-  }
-  function pieChart(canvasId, labels, data, colors) {
-    const ctx = document.getElementById(canvasId);
-    if (!ctx) return;
-    const c = new Chart(ctx, {
-      type: 'doughnut',
-      data: { labels: labels, datasets: [{ data: data, backgroundColor: colors, borderWidth: 0 }] },
-      options: { responsive: true, maintainAspectRatio: false, cutout: '58%',
-        plugins: { legend: { position: 'bottom', labels: { color: css('--ink-2'), boxWidth: 12 } } } }
-    });
-    state.charts.push(c);
-  }
-  function css(v) { return getComputedStyle(document.body).getPropertyValue(v).trim(); }
-
-  // ------------------ Páginas ------------------
-  const RENDER = {
-
-    /* ---------- DASHBOARD ---------- */
-    dashboard: function (el) {
-      cached('dashboard', { mes: state.month }).then(function (d) {
-        const s = state.session;
-        const hasRet = s.permissions.pages.indexOf('novaRetencao') !== -1;
-        let html = '';
-
-        // Cards superiores
-        html += '<div class="grid kpis">';
-        html += kpi('Vendas', d.cards.vendas, 'Meta: ' + d.cards.metaVendas + ' · Restam ' + d.cards.restanteVendas);
-        html += kpi('Comissão', BRL(d.cards.comissao), 'Meta: ' + BRL(d.cards.metaComissao), 'ok');
-        html += kpi('Progresso da meta', d.cards.progressoComissao + '%', progressBar(d.cards.progressoComissao),
-          d.cards.progressoComissao >= 100 ? 'ok' : d.cards.progressoComissao >= 60 ? '' : 'warn');
-        html += kpi('Restante (R$)', BRL(d.cards.restanteComissao), 'para bater a meta', 'warn');
-        html += '</div>';
-
-        // Blocos de retenção (apenas perfis com retenção)
-        if (hasRet) {
-          const r = d.retencao;
-          html += '<h2 class="section-title">Retenção — Cartão de Crédito</h2><div class="grid kpis">';
-          html += kpi('% Retidos', r.cartao.pctRetidos + '%', r.cartao.retidos + ' de ' + r.cartao.atendidos + ' atendidos', 'ok');
-          html += kpi('% Argumentação', r.cartao.pctArgumentacao + '%', r.cartao.argumentados + ' argumentados');
-          html += kpi('% Cancelados', r.cartao.pctCancelados + '%', r.cartao.cancelados + ' cancelados', 'bad');
-          html += kpi('Atendidos', r.cartao.atendidos, 'no mês');
-          html += '</div>';
-
-          html += '<h2 class="section-title">Retenção — Conta Digital</h2><div class="grid kpis">';
-          html += kpi('% Retidos', r.conta.pctRetidos + '%', r.conta.retidos + ' retidos', 'ok');
-          html += kpi('% Cancelados', r.conta.pctCancelados + '%', r.conta.cancelados + ' cancelados', 'bad');
-          html += kpi('Atendidos', r.conta.atendidos, 'no mês');
-          html += '</div>';
-
-          html += '<h2 class="section-title">Cashback</h2><div class="grid kpis">';
-          html += kpi('% Cashback', r.cashback.pctCashback + '%', r.cashback.cashback + ' conversões', 'ok');
-          html += kpi('% Milhas', r.cashback.pctMilhas + '%', r.cashback.milhas + ' em milhas');
-          html += kpi('Atendidos', r.cashback.atendidos, 'no mês');
-          html += '</div>';
-
-          html += '<h2 class="section-title">Comissão (Vendas + Retenção)</h2><div class="grid kpis">';
-          html += kpi('Vendas', BRL(d.comissao.totalVendas));
-          html += kpi('Retenção', BRL(d.comissao.totalRetencao));
-          html += kpi('Total atual', BRL(d.comissao.total), 'Meta: ' + BRL(d.cards.metaComissao), 'ok');
-          html += kpi('Progresso', d.cards.progressoComissao + '%', progressBar(d.cards.progressoComissao));
-          html += '</div>';
-        }
-
-        // Gráfico de evolução diária
-        html += '<h2 class="section-title">Evolução diária</h2><div class="card"><div class="chart-box"><canvas id="chDaily"></canvas></div></div>';
-
-        // Tabelas
-        html += '<div class="grid two" style="margin-top:16px">';
-        html += '<div class="card"><h3>Vendas por produto</h3>' +
-          table(['Produto', 'Quantidade'], d.vendasPorProduto.map(function (p) {
-            return '<tr><td>' + esc(p.produto) + '</td><td><strong>' + p.quantidade + '</strong></td></tr>';
-          })) + '</div>';
-        html += '<div class="card"><h3>Vendas individuais</h3>' +
-          table(['Data', 'CPF', 'Produto', 'Qtd'], d.vendasIndividuais.map(function (v) {
-            return '<tr><td>' + esc(v.data) + '</td><td>' + esc(v.cpf) + '</td><td>' + esc(v.produto) + '</td><td>' + v.quantidade + '</td></tr>';
-          })) + '</div>';
-        html += '</div>';
-
-        if (hasRet) {
-          html += '<div class="grid two" style="margin-top:16px">';
-          html += '<div class="card"><h3>Massificados retidos</h3>' +
-            table(['Data', 'CPF', 'Produto', 'Tipo'], d.massificadosRetidos.map(function (m) {
-              return '<tr><td>' + esc(m.data) + '</td><td>' + esc(m.cpf) + '</td><td>' + esc(m.produto) +
-                '</td><td><span class="badge ok">' + esc(m.resultado) + '</span></td></tr>';
-            })) + '</div>';
-          html += '<div class="card"><h3>Retenção dia a dia</h3>' +
-            table(['Dia', 'Quantidade', '% Retenção'], d.tabelaDiaria.map(function (t) {
-              return '<tr><td>' + esc(t.dia) + '</td><td>' + t.quantidade + '</td><td><span class="badge ' +
-                (t.pctRetencao >= 70 ? 'ok' : 'warn') + '">' + t.pctRetencao + '%</span></td></tr>';
-            })) + '</div>';
-          html += '</div>';
-        }
-
-        el.innerHTML = html;
-        lineChart('chDaily',
-          d.graficoDiario.map(function (x) { return x.dia; }),
-          hasRet
-            ? [{ label: 'Vendas', data: d.graficoDiario.map(function (x) { return x.vendas; }) },
-               { label: 'Retenções', data: d.graficoDiario.map(function (x) { return x.retencoes; }) }]
-            : [{ label: 'Vendas', data: d.graficoDiario.map(function (x) { return x.vendas; }) }]);
-      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
-    },
-
-    /* ---------- NOVA VENDA ---------- */
-    novaVenda: function (el) {
-      const prods = state.session.products.filter(function (p) { return String(p.ativo) !== 'Não'; });
-      el.innerHTML =
-        '<div class="card" style="max-width:640px">' +
-        '<h3>Registrar venda</h3>' +
-        '<form id="fVenda"><div class="form-grid">' +
-        '<div><label>Data *</label><input type="date" name="data" required value="' + new Date().toISOString().slice(0, 10) + '"></div>' +
-        '<div><label>CPF *</label><input name="cpf" required inputmode="numeric" maxlength="14" placeholder="000.000.000-00"></div>' +
-        '<div><label>Produto *</label><select name="produto" required>' +
-        prods.map(function (p) { return '<option>' + esc(p.nome) + '</option>'; }).join('') + '</select></div>' +
-        '<div><label>Quantidade *</label><input type="number" name="quantidade" min="1" value="1" required></div>' +
-        '<div class="full"><label>Observação (opcional)</label><textarea name="obs" rows="2"></textarea></div>' +
-        '</div><div class="form-actions"><button class="btn" type="submit">Cadastrar venda</button></div></form></div>';
-
-      bindForm('fVenda', 'sales.create', 'Venda cadastrada com sucesso!');
-    },
-
-    /* ---------- NOVA RETENÇÃO ---------- */
-    novaRetencao: function (el) {
-      const rp = state.session.retentionProducts;
-      el.innerHTML =
-        '<div class="card" style="max-width:640px">' +
-        '<h3>Registrar retenção</h3>' +
-        '<form id="fRet"><div class="form-grid">' +
-        '<div><label>Data *</label><input type="date" name="data" required value="' + new Date().toISOString().slice(0, 10) + '"></div>' +
-        '<div><label>CPF *</label><input name="cpf" required inputmode="numeric" maxlength="14" placeholder="000.000.000-00"></div>' +
-        '<div><label>Produto *</label><select name="produto" id="retProd" required>' +
-        Object.keys(rp).map(function (p) { return '<option>' + esc(p) + '</option>'; }).join('') + '</select></div>' +
-        '<div><label>Resultado *</label><select name="resultado" id="retRes" required></select></div>' +
-        '<div class="full"><label>OBS (opcional)</label><textarea name="obs" rows="2"></textarea></div>' +
-        '</div><div class="form-actions"><button class="btn" type="submit">Cadastrar retenção</button></div></form></div>';
-
-      const prodSel = document.getElementById('retProd');
-      const resSel = document.getElementById('retRes');
-      function fillResults() {
-        resSel.innerHTML = rp[prodSel.value].map(function (r) { return '<option>' + esc(r) + '</option>'; }).join('');
-      }
-      prodSel.addEventListener('change', fillResults);
-      fillResults();
-      bindForm('fRet', 'retention.create', 'Retenção cadastrada com sucesso!');
-    },
-
-    /* ---------- EQUIPE (anonimizada) ---------- */
-    equipe: function (el) {
-      cached('team', { mes: state.month }).then(function (t) {
-        const hasRet = state.session.permissions.pages.indexOf('novaRetencao') !== -1;
-        let html = '<div class="grid kpis">';
-        html += kpi('Total da equipe', t.totalEquipe, 'vendas no mês');
-        html += kpi('Membros', t.totalMembros, 'na equipe');
-        html += '</div>';
-
-        html += '<div class="grid two" style="margin-top:16px">';
-        html += '<div class="card"><h3>Vendas por produto (equipe)</h3>' +
-          table(['Produto', 'Quantidade'], t.vendasPorProduto.map(function (p) {
-            return '<tr><td>' + esc(p.produto) + '</td><td><strong>' + p.quantidade + '</strong></td></tr>';
-          })) + '</div>';
-        html += '<div class="card"><h3>Vendas dos colegas</h3><p class="muted" style="margin-bottom:8px">Sem identificação nominal.</p>' +
-          table(['', 'Quantidade'], t.vendasAnonimas.map(function (v) {
-            return '<tr class="' + (v.propria ? 'me' : '') + '"><td>' + (v.propria ? 'Você' : esc(v.rotulo)) + '</td><td>' + v.quantidade + '</td></tr>';
-          })) + '</div></div>';
-
-        if (hasRet) {
-          html += '<h2 class="section-title">Retenção da equipe</h2>';
-          html += '<div class="grid kpis">';
-          html += '<div class="card"><h3>Cartão de Crédito</h3><div class="chart-box" style="height:210px"><canvas id="pzCartao"></canvas></div></div>';
-          html += '<div class="card"><h3>Conta Digital</h3><div class="chart-box" style="height:210px"><canvas id="pzConta"></canvas></div></div>';
-          html += '<div class="card"><h3>Cashback</h3><div class="chart-box" style="height:210px"><canvas id="pzCash"></canvas></div></div>';
-          html += '</div>';
-          html += '<div class="card" style="margin-top:16px"><h3>Atendidos por membro</h3>' +
-            '<p class="muted" style="margin-bottom:8px">Sem identificação nominal.</p>' +
-            table(['', 'Quantidade', '% Retenção'], t.retencaoAnonima.map(function (r) {
-              return '<tr class="' + (r.propria ? 'me' : '') + '"><td>' + (r.propria ? 'Você' : esc(r.rotulo)) + '</td><td>' + r.quantidade +
-                '</td><td><span class="badge ' + (r.pctRetencao >= 70 ? 'ok' : 'warn') + '">' + r.pctRetencao + '%</span></td></tr>';
-            })) + '</div>';
-        }
-
-        el.innerHTML = html;
-        if (hasRet) {
-          const p = t.pizza;
-          pieChart('pzCartao', ['Retidos', 'Argumentados', 'Cancelados'],
-            [Math.max(0, p.cartao.retidos - p.cartao.argumentados), p.cartao.argumentados, p.cartao.cancelados],
-            [css('--ok'), css('--accent'), css('--bad')]);
-          pieChart('pzConta', ['Retidos', 'Cancelados'], [p.conta.retidos, p.conta.cancelados], [css('--ok'), css('--bad')]);
-          pieChart('pzCash', ['Cashback', 'Milhas'], [p.cashback.cashback, p.cashback.milhas], [css('--ok'), css('--warn')]);
-        }
-      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
-    },
-
-    /* ---------- RANKING ---------- */
-    ranking: function (el) {
-      cached('ranking', { mes: state.month }).then(function (r) {
-        const medals = ['🥇', '🥈', '🥉'];
-        let html = '';
-        if (r.minhaPosicao) html += '<div class="grid kpis">' + kpi('Sua posição', '#' + r.minhaPosicao, 'no ranking do mês', 'ok') + '</div>';
-        html += '<div class="card" style="margin-top:16px"><h3>TOP 10 · ' + esc(r.mes) + '</h3>' +
-          table(['#', 'Atendente', 'Equipe', 'Vendas', '% Retenção'], r.top10.map(function (x) {
-            return '<tr class="' + (x.propria ? 'me' : '') + '"><td class="pos-medal">' + (medals[x.posicao - 1] || x.posicao) + '</td>' +
-              '<td>' + esc(x.nome) + '</td><td>' + esc(x.equipe) + '</td><td><strong>' + x.vendas + '</strong></td>' +
-              '<td><span class="badge ' + (x.pctRetencao >= 70 ? 'ok' : 'neutral') + '">' + x.pctRetencao + '%</span></td></tr>';
-          }), 'Sem dados suficientes para o ranking.') + '</div>';
-        el.innerHTML = html;
-      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
-    },
-
-    /* ---------- GESTÃO DA EQUIPE ---------- */
-    gestao: function (el) {
-      cached('users.list').then(function (users) {
-        let html = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
-          '<h3 style="margin:0">Membros da equipe</h3>' +
-          '<button class="btn small" onclick="App.userForm()">+ Cadastrar membro</button></div>' +
-          table(['Nome', 'Email', 'Cargo', 'Status', 'Ações'], users.map(function (u) {
-            return '<tr><td><strong>' + esc(u.nome) + '</strong><br><small class="muted">' + esc(u.equipe) + '</small></td>' +
-              '<td>' + esc(u.email) + '</td><td>' + esc(u.cargo) + '</td>' +
-              '<td><span class="badge ' + (u.status === 'Ativo' ? 'ok' : 'neutral') + '">' + esc(u.status) + '</span></td>' +
-              '<td style="white-space:nowrap">' +
-              '<button class="btn small ghost" onclick="App.userIndicators(\'' + u.id + '\')">📈</button> ' +
-              '<button class="btn small ghost" onclick="App.userForm(\'' + u.id + '\')">✏️</button> ' +
-              '<button class="btn small ghost" onclick="App.goalForm(\'' + u.id + '\',\'' + esc(u.nome) + '\')">🎯</button> ' +
-              '<button class="btn small danger" onclick="App.userDelete(\'' + u.id + '\',\'' + esc(u.nome) + '\')">🗑</button></td></tr>';
-          })) + '</div>';
-        html += '<div class="card" style="margin-top:16px"><h3>Meta da equipe</h3>' +
-          '<p class="muted">Defina a meta mensal aplicada aos membros sem meta individual.</p>' +
-          '<button class="btn small" style="margin-top:10px" onclick="App.goalForm(null,\'' + esc(state.session.user.equipe) + '\')">Alterar meta da equipe</button></div>';
-        el.innerHTML = html;
-      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
-    },
-
-    /* ---------- RELATÓRIOS ---------- */
-    relatorios: function (el) {
-      const tipos = state.session.reportTypes;
-      el.innerHTML = '<div class="card" style="max-width:560px"><h3>Solicitar relatório</h3>' +
-        '<p class="muted">O relatório é gerado do mês selecionado no topo e baixado em CSV (abre no Excel/Sheets).</p>' +
-        '<div class="pill-list" style="margin-top:14px">' +
-        tipos.map(function (t) { return '<button class="btn ghost" onclick="App.report(\'' + t + '\')">📄 ' + t + '</button>'; }).join('') +
-        '</div></div>';
-    },
-
-    /* ---------- CADASTRO (ADMIN) ---------- */
-    cadastro: function (el) {
-      Promise.all([cached('users.list'), cached('session', {}, true)]).then(function (res) {
-        state.session = res[1];
-        const teams = state.session.teams;
-        let html = '<div class="grid two">';
-        html += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Usuários</h3>' +
-          '<button class="btn small" onclick="App.userForm()">+ Novo usuário</button></div>' +
-          '<p class="muted" style="margin-top:6px">Cadastro completo de usuários de todas as equipes.</p></div>';
-        html += '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Equipes</h3>' +
-          '<button class="btn small" onclick="App.teamForm()">+ Nova equipe</button></div>' +
-          table(['Equipe', 'Tipo', 'Ações'], teams.map(function (t) {
-            return '<tr><td><strong>' + esc(t.nome) + '</strong></td><td>' + esc(t.tipo) + '</td>' +
-              '<td><button class="btn small ghost" onclick=\'App.teamForm(' + JSON.stringify(t) + ')\'>✏️</button> ' +
-              '<button class="btn small danger" onclick="App.teamDelete(\'' + t.id + '\')">🗑</button></td></tr>';
-          }), 'Nenhuma equipe cadastrada.') + '</div>';
-        html += '</div>';
-        el.innerHTML = html;
-      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
-    },
-
-    /* ---------- CONFIGURAÇÕES (ADMIN) ---------- */
-    configuracoes: function (el) {
-      Promise.all([cached('settings.list'), cached('session', {}, true)]).then(function (res) {
-        const settings = res[0]; state.session = res[1];
-        const prods = state.session.products;
-        let html = '<div class="card"><h3>Parâmetros e comissões</h3>' +
-          '<p class="muted">Regras de comissão, metas padrão e parâmetros — tudo editável aqui, sem abrir o Sheets. Valores marcados com "ajustar conforme PDF" usam padrões provisórios.</p>';
-        settings.filter(function (s) { return String(s.chave).indexOf('sistema.') !== 0; }).forEach(function (s) {
-          html += '<div class="settings-row"><div><strong>' + esc(s.chave) + '</strong><small>' + esc(s.descricao) + '</small></div>' +
-            '<input id="set_' + btoa(s.chave).replace(/=/g, '') + '" value="' + esc(s.valor) + '">' +
-            '<button class="btn small" onclick="App.saveSetting(\'' + esc(s.chave) + '\',\'set_' + btoa(s.chave).replace(/=/g, '') + '\')">Salvar</button></div>';
-        });
-        html += '</div>';
-
-        html += '<div class="card" style="margin-top:16px"><div style="display:flex;justify-content:space-between;align-items:center">' +
-          '<h3 style="margin:0">Produtos de venda</h3><button class="btn small" onclick="App.productForm()">+ Novo produto</button></div>' +
-          table(['Produto', 'Comissão unitária', 'Ativo', 'Ações'], prods.map(function (p) {
-            return '<tr><td><strong>' + esc(p.nome) + '</strong></td><td>' + BRL(parseFloat(p.comissaoUnitaria)) + '</td>' +
-              '<td><span class="badge ' + (p.ativo === 'Sim' ? 'ok' : 'neutral') + '">' + esc(p.ativo) + '</span></td>' +
-              '<td><button class="btn small ghost" onclick=\'App.productForm(' + JSON.stringify(p) + ')\'>✏️</button> ' +
-              '<button class="btn small danger" onclick="App.productDelete(\'' + p.id + '\')">🗑</button></td></tr>';
-          })) + '</div>';
-        el.innerHTML = html;
-      }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
-    }
-  };
-
-  // ------------------ Formulários e ações ------------------
-
-  /** Liga um <form> a uma action da API, com toast e refresh. */
-  function bindForm(formId, action, successMsg) {
-    const form = document.getElementById(formId);
-    form.addEventListener('submit', function (ev) {
-      ev.preventDefault();
-      const btn = form.querySelector('button[type=submit]');
-      btn.disabled = true;
-      const payload = {};
-      new FormData(form).forEach(function (v, k) { payload[k] = v; });
-      if (payload.cpf) payload.cpf = payload.cpf.replace(/\D/g, '');
-      api(action, payload).then(function () {
-        toast(successMsg);
-        invalidate();          // atualização imediata: limpa cache de cliente
-        form.reset();
-        const dt = form.querySelector('input[type=date]');
-        if (dt) dt.value = new Date().toISOString().slice(0, 10);
-        btn.disabled = false;
-      }).catch(function (e) { toast(e.message, true); btn.disabled = false; });
-    });
-  }
-
-  /** Modal de criação/edição de usuário. */
-  function userForm(id) {
-    const me = state.session.user;
-    const isAdmin = me.cargo === 'ADMIN';
-    const roles = isAdmin ? state.session.roles
-      : state.session.roles.filter(function (r) { return r.indexOf('Atendente') === 0; });
-
-    const done = function (u) {
-      u = u || {};
-      openModal(id ? 'Editar usuário' : 'Cadastrar usuário',
-        '<form id="fUser"><div class="form-grid">' +
-        '<div class="full"><label>Nome *</label><input name="nome" required value="' + esc(u.nome) + '"></div>' +
-        '<div class="full"><label>Email *</label><input type="email" name="email" required value="' + esc(u.email) + '"></div>' +
-        '<div><label>Cargo *</label><select name="cargo">' +
-        roles.map(function (r) { return '<option ' + (u.cargo === r ? 'selected' : '') + '>' + esc(r) + '</option>'; }).join('') + '</select></div>' +
-        '<div><label>Status</label><select name="status"><option ' + (u.status === 'Ativo' ? 'selected' : '') + '>Ativo</option>' +
-        '<option ' + (u.status === 'Inativo' ? 'selected' : '') + '>Inativo</option></select></div>' +
-        (isAdmin ? '<div class="full"><label>Equipe</label><input name="equipe" value="' + esc(u.equipe || '') + '"></div>' : '') +
-        '</div><div class="form-actions"><button class="btn ghost" type="button" onclick="App.closeModal()">Cancelar</button>' +
-        '<button class="btn" type="submit">Salvar</button></div></form>');
-
-      document.getElementById('fUser').addEventListener('submit', function (ev) {
-        ev.preventDefault();
-        const payload = {}; new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
-        if (id) payload.id = id;
-        api(id ? 'users.update' : 'users.create', payload).then(function () {
-          toast(id ? 'Alterações salvas!' : 'Usuário cadastrado com sucesso!');
-          closeModal(); invalidate(); go(state.page);
-        }).catch(function (e) { toast(e.message, true); });
-      });
-    };
-
-    if (id) {
-      cached('users.list').then(function (users) {
-        done(users.find(function (u) { return String(u.id) === String(id); }));
-      });
-    } else done();
-  }
-
-  /** Exclusão definitiva de usuário (com confirmação). */
-  function userDelete(id, nome) {
-    openModal('Excluir usuário',
-      '<p>Excluir <strong>' + esc(nome) + '</strong> definitivamente? A linha será removida da planilha.</p>' +
-      '<div class="form-actions"><button class="btn ghost" onclick="App.closeModal()">Cancelar</button>' +
-      '<button class="btn danger" id="btnDelU">Excluir definitivamente</button></div>');
-    document.getElementById('btnDelU').addEventListener('click', function () {
-      api('users.delete', { id: id }).then(function () {
-        toast('Usuário excluído!'); closeModal(); invalidate(); go(state.page);
-      }).catch(function (e) { toast(e.message, true); });
-    });
-  }
-
-  /** Indicadores individuais de um membro. */
-  function userIndicators(id) {
-    openModal('Indicadores individuais', '<div class="empty">Carregando…</div>');
-    api('users.indicators', { id: id, mes: state.month }).then(function (d) {
-      const c = d.dashboard.cards, r = d.dashboard.retencao;
-      document.getElementById('modalBody').innerHTML =
-        '<p class="muted" style="margin-bottom:12px"><strong>' + esc(d.user.nome) + '</strong> · ' + esc(d.user.cargo) + ' · ' + esc(d.dashboard.mes) + '</p>' +
-        '<div class="grid kpis">' +
-        kpi('Vendas', c.vendas, 'Meta: ' + c.metaVendas) +
-        kpi('Comissão', BRL(d.comissao.total), 'Meta: ' + BRL(c.metaComissao), 'ok') +
-        kpi('% Ret. Cartão', r.cartao.pctRetidos + '%', r.cartao.atendidos + ' atendidos') +
-        kpi('% Ret. Conta', r.conta.pctRetidos + '%', r.conta.atendidos + ' atendidos') +
-        '</div>' +
-        (d.comissao.cartao.detalhes.length
-          ? '<p class="muted" style="margin-top:12px">Composição: ' + d.comissao.cartao.detalhes.map(esc).join(' · ') + '</p>' : '');
-    }).catch(function (e) { toast(e.message, true); closeModal(); });
-  }
-
-  /** Modal de meta (individual ou da equipe). */
-  function goalForm(userId, nome) {
-    openModal('Definir meta — ' + esc(nome),
-      '<form id="fGoal"><div class="form-grid">' +
-      '<div><label>Meta de vendas</label><input type="number" name="metaVendas" min="0" value="50"></div>' +
-      '<div><label>Meta de comissão (R$)</label><input type="number" name="metaComissao" min="0" step="0.01" value="1500"></div>' +
-      '<div><label>Meta de retenção (%)</label><input type="number" name="metaRetencao" min="0" max="100" value="75"></div>' +
-      '<div><label>Mês</label><input type="month" name="mes" value="' + state.month + '"></div>' +
-      '</div><div class="form-actions"><button class="btn ghost" type="button" onclick="App.closeModal()">Cancelar</button>' +
-      '<button class="btn" type="submit">Salvar meta</button></div></form>');
-    document.getElementById('fGoal').addEventListener('submit', function (ev) {
-      ev.preventDefault();
-      const payload = { tipo: userId ? 'user' : 'team', alvoId: userId || state.session.user.equipe };
-      new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
-      api('goals.set', payload).then(function () {
-        toast('Meta alterada!'); closeModal(); invalidate();
-      }).catch(function (e) { toast(e.message, true); });
-    });
-  }
-
-  /** Gera e baixa relatório CSV. */
-  function report(tipo) {
-    toast('Relatório solicitado! Gerando…');
-    api('reports.generate', { tipo: tipo, mes: state.month }).then(function (r) {
-      const blob = new Blob([r.csv], { type: 'text/csv;charset=utf-8' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = r.filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
-      toast('Relatório "' + tipo + '" pronto para download!');
-    }).catch(function (e) { toast(e.message, true); });
-  }
-
-  /** Salvar configuração individual (ADMIN). */
-  function saveSetting(chave, inputId) {
-    api('settings.update', { chave: chave, valor: document.getElementById(inputId).value }).then(function () {
-      toast('Alterações salvas!'); invalidate();
-    }).catch(function (e) { toast(e.message, true); });
-  }
-
-  /** Modal de produto (ADMIN). */
-  function productForm(p) {
-    p = p || {};
-    openModal(p.id ? 'Editar produto' : 'Novo produto',
-      '<form id="fProd"><div class="form-grid">' +
-      '<div class="full"><label>Nome *</label><input name="nome" required value="' + esc(p.nome) + '"></div>' +
-      '<div><label>Comissão unitária (R$)</label><input type="number" step="0.01" min="0" name="comissaoUnitaria" value="' + esc(p.comissaoUnitaria || 0) + '"></div>' +
-      '<div><label>Ativo</label><select name="ativo"><option ' + (p.ativo !== 'Não' ? 'selected' : '') + '>Sim</option><option ' + (p.ativo === 'Não' ? 'selected' : '') + '>Não</option></select></div>' +
-      '</div><div class="form-actions"><button class="btn ghost" type="button" onclick="App.closeModal()">Cancelar</button>' +
-      '<button class="btn" type="submit">Salvar</button></div></form>');
-    document.getElementById('fProd').addEventListener('submit', function (ev) {
-      ev.preventDefault();
-      const payload = { id: p.id, categoria: 'Massificado' };
-      new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
-      api('products.save', payload).then(function () {
-        toast('Alterações salvas!'); closeModal(); invalidate(); go('configuracoes');
-      }).catch(function (e) { toast(e.message, true); });
-    });
-  }
-  function productDelete(id) {
-    api('products.delete', { id: id }).then(function () {
-      toast('Produto excluído!'); invalidate(); go('configuracoes');
-    }).catch(function (e) { toast(e.message, true); });
-  }
-
-  /** Modal de equipe (ADMIN). */
-  function teamForm(t) {
-    t = t || {};
-    openModal(t.id ? 'Editar equipe' : 'Nova equipe',
-      '<form id="fTeam"><div class="form-grid">' +
-      '<div class="full"><label>Nome *</label><input name="nome" required value="' + esc(t.nome) + '"></div>' +
-      '<div class="full"><label>Tipo</label><select name="tipo">' +
-      ['Vendas', 'Retenção e vendas fone', 'Vendas e retenção digital'].map(function (x) {
-        return '<option ' + (t.tipo === x ? 'selected' : '') + '>' + x + '</option>';
-      }).join('') + '</select></div>' +
-      '</div><div class="form-actions"><button class="btn ghost" type="button" onclick="App.closeModal()">Cancelar</button>' +
-      '<button class="btn" type="submit">Salvar</button></div></form>');
-    document.getElementById('fTeam').addEventListener('submit', function (ev) {
-      ev.preventDefault();
-      const payload = { id: t.id };
-      new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
-      api('teams.save', payload).then(function () {
-        toast('Alterações salvas!'); closeModal(); invalidate(); go('cadastro');
-      }).catch(function (e) { toast(e.message, true); });
-    });
-  }
-  function teamDelete(id) {
-    api('teams.delete', { id: id }).then(function () {
-      toast('Equipe excluída!'); invalidate(); go('cadastro');
-    }).catch(function (e) { toast(e.message, true); });
-  }
-
-  // ------------------ Público ------------------
-  document.addEventListener('DOMContentLoaded', boot);
   return {
-    closeModal: closeModal, userForm: userForm, userDelete: userDelete,
-    userIndicators: userIndicators, goalForm: goalForm, report: report,
-    saveSetting: saveSetting, productForm: productForm, productDelete: productDelete,
-    teamForm: teamForm, teamDelete: teamDelete
+    cartao: {
+      atendidos: cc.atendidos, retidos: cc.retidos, argumentados: cc.argumentados, cancelados: cc.cancelados,
+      pctRetidos: pct_(cc.retidos, cc.atendidos),
+      pctArgumentacao: pct_(cc.argumentados, cc.atendidos),
+      pctCancelados: pct_(cc.cancelados, cc.atendidos)
+    },
+    conta: {
+      atendidos: cd.atendidos, retidos: cd.retidos, cancelados: cd.cancelados,
+      pctRetidos: pct_(cd.retidos, cd.atendidos),
+      pctCancelados: pct_(cd.cancelados, cd.atendidos)
+    },
+    cashback: {
+      atendidos: cb.atendidos, cashback: cb.cashback, milhas: cb.milhas,
+      pctCashback: pct_(cb.cashback, cb.atendidos),
+      pctMilhas: pct_(cb.milhas, cb.atendidos)
+    },
+    massificado: {
+      atendidos: ms.atendidos, retidos: ms.retidos, argumentados: ms.argumentados,
+      incentivos: ms.incentivos, cancelados: ms.cancelados,
+      pctRetidos: pct_(ms.retidos, ms.atendidos)
+    }
   };
-})();
-</script>
+}

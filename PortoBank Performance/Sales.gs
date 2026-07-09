@@ -1,81 +1,52 @@
-<!DOCTYPE html>
-<!--
-  PortoBank Performance — Index.html
-  SPA servida pelo HtmlService. Estrutura fixa; o conteúdo de
-  cada página é renderizado por App.html conforme permissões.
--->
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <base target="_top">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-  <?!= include('Styles'); ?>
-</head>
-<body data-theme="portobank">
+/**
+ * ============================================================
+ * PortoBank Performance — Sales.gs
+ * ------------------------------------------------------------
+ * Registro e consulta de vendas de massificados.
+ * Campos: Data, CPF, Produto (Massificado), Quantidade, OBS.
+ * ============================================================
+ */
 
-  <!-- Tela de carregamento -->
-  <div id="splash">
-    <div class="splash-mark">PB</div>
-    <div class="splash-title">PortoBank <span>Performance</span></div>
-    <div class="splash-bar"><div></div></div>
-  </div>
+/**
+ * Registra uma nova venda.
+ * @param {Object} me Usuário autenticado.
+ * @param {Object} data {data, cpf, produto, quantidade, obs}
+ */
+function salesCreate_(me, data) {
+  if (!data.data) throw new Error('Data é obrigatória.');
+  if (!isValidCpf_(data.cpf)) throw new Error('CPF inválido (11 dígitos).');
+  if (!data.produto) throw new Error('Produto é obrigatório.');
+  const qtd = parseInt(data.quantidade, 10);
+  if (!qtd || qtd < 1) throw new Error('Quantidade deve ser maior que zero.');
 
-  <!-- Tela de acesso negado -->
-  <div id="denied" class="hidden">
-    <div class="denied-card">
-      <h2>Acesso não autorizado</h2>
-      <p id="deniedMsg"></p>
-    </div>
-  </div>
+  const sale = {
+    id: uid_(),
+    data: toDateKey_(data.data),
+    cpf: String(data.cpf).replace(/\D/g, ''),
+    produto: String(data.produto).trim(),
+    quantidade: qtd,
+    obs: String(data.obs || '').trim(),
+    userId: me.id,
+    equipe: me.equipe,
+    criadoEm: nowIso_()
+  };
+  appendRow_(SHEETS.SALES, sale);
+  audit_(me.email, 'SALE_CREATE', sale.produto + ' x' + qtd);
+  return sale;
+}
 
-  <!-- Aplicação -->
-  <div id="app" class="hidden">
-    <aside id="sidebar">
-      <div class="brand">
-        <div class="brand-mark">PB</div>
-        <div class="brand-name">PortoBank<span>Performance</span></div>
-      </div>
-      <nav id="nav"></nav>
-      <div class="sidebar-footer">
-        <div class="theme-row" id="themeRow" title="Tema"></div>
-        <div class="user-chip">
-          <div class="avatar" id="userAvatar"></div>
-          <div class="user-meta">
-            <strong id="userName"></strong>
-            <small id="userRole"></small>
-          </div>
-        </div>
-      </div>
-    </aside>
-
-    <main id="main">
-      <header id="topbar">
-        <button id="menuBtn" class="icon-btn" aria-label="Menu">☰</button>
-        <h1 id="pageTitle">Dashboard</h1>
-        <div class="topbar-right">
-          <input type="month" id="monthPicker" class="month-picker" aria-label="Mês de referência">
-        </div>
-      </header>
-      <section id="content" aria-live="polite"></section>
-    </main>
-  </div>
-
-  <!-- Toast container -->
-  <div id="toasts" aria-live="assertive"></div>
-
-  <!-- Modal genérico -->
-  <div id="modalBackdrop" class="hidden">
-    <div id="modal" role="dialog" aria-modal="true">
-      <div class="modal-head">
-        <h3 id="modalTitle"></h3>
-        <button class="icon-btn" onclick="App.closeModal()" aria-label="Fechar">✕</button>
-      </div>
-      <div id="modalBody"></div>
-    </div>
-  </div>
-
-  <?!= include('App'); ?>
-</body>
-</html>
+/**
+ * Vendas do mês corrente filtradas por escopo.
+ * @param {Object} me
+ * @param {string} scope 'self' | 'team' | 'all'
+ * @param {string=} monthKey 'yyyy-MM' (padrão: mês atual)
+ */
+function salesQuery_(me, scope, monthKey) {
+  const mk = monthKey || toMonthKey_(new Date());
+  return readAll_(SHEETS.SALES).filter(function (s) {
+    if (toMonthKey_(s.data) !== mk) return false;
+    if (scope === 'self') return String(s.userId) === String(me.id);
+    if (scope === 'team') return String(s.equipe) === String(me.equipe);
+    return true; // all
+  });
+}

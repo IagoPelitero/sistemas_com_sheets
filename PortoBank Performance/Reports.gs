@@ -1,89 +1,118 @@
 /**
  * ============================================================
- * PortoBank Performance — Goals.gs
+ * PortoBank Performance — Reports.gs
  * ------------------------------------------------------------
- * Metas por usuário ou por equipe, por mês.
- * tipo: 'user' | 'team' — alvoId: userId ou nome da equipe.
+ * Relatórios exportáveis (CSV) para Supervisor e ADMIN:
+ * Performance, Vendas, Retenção, Comissão, Equipe, Ranking,
+ * Metas. O CSV é gerado no servidor e baixado pelo cliente.
  * ============================================================
  */
 
-/**
- * Meta efetiva de um usuário no mês (meta individual, senão
- * meta da equipe, senão padrão do sistema).
- */
-function goalForUser_(user, monthKey) {
-  const mk = monthKey || toMonthKey_(new Date());
-  const goals = readAll_(SHEETS.GOALS);
-
-  const own = goals.find(function (g) {
-    return g.tipo === 'user' && String(g.alvoId) === String(user.id) && String(g.mes) === mk;
-  });
-  if (own) return normalizeGoal_(own);
-
-  const team = goals.find(function (g) {
-    return g.tipo === 'team' && String(g.alvoId) === String(user.equipe) && String(g.mes) === mk;
-  });
-  if (team) return normalizeGoal_(team);
-
-  return {
-    metaVendas: settingNum_('meta.padrao.vendas'),
-    metaComissao: settingNum_('meta.padrao.comissao'),
-    metaRetencao: settingNum_('meta.padrao.retencao')
-  };
-}
-
-function normalizeGoal_(g) {
-  return {
-    metaVendas: parseFloat(g.metaVendas) || 0,
-    metaComissao: parseFloat(g.metaComissao) || 0,
-    metaRetencao: parseFloat(g.metaRetencao) || 0
-  };
-}
+const REPORT_TYPES = ['Performance', 'Vendas', 'Retenção', 'Comissão', 'Equipe', 'Ranking', 'Metas'];
 
 /**
- * Define/atualiza uma meta (ADMIN: qualquer; Supervisor: só a
- * própria equipe e membros dela).
+ * Gera um relatório e devolve o CSV pronto para download.
  * @param {Object} me
- * @param {Object} data {tipo, alvoId, metaVendas, metaComissao, metaRetencao, mes}
+ * @param {string} tipo Um de REPORT_TYPES.
+ * @param {string=} monthKey
+ * @return {Object} {filename, csv}
  */
-function goalsSet_(me, data) {
-  const perms = getPermissions_(me);
-  if (!perms.canEditGoals) throw new Error('Sem permissão para alterar metas.');
+function reportGenerate_(me, tipo, monthKey) {
+  if (!getPermissions_(me).canReports) throw new Error('Sem permissão para gerar relatórios.');
+  if (REPORT_TYPES.indexOf(tipo) === -1) throw new Error('Tipo de relatório inválido.');
 
-  const mk = data.mes || toMonthKey_(new Date());
-  if (!isAdmin_(me)) {
-    if (data.tipo === 'team' && String(data.alvoId) !== String(me.equipe)) {
-      throw new Error('Você só pode alterar metas da sua equipe.');
-    }
-    if (data.tipo === 'user') {
-      const target = readAll_(SHEETS.USERS).find(function (u) { return String(u.id) === String(data.alvoId); });
-      if (!target || String(target.equipe) !== String(me.equipe)) {
-        throw new Error('Você só pode alterar metas de membros da sua equipe.');
-      }
-    }
+  const mk = monthKey || toMonthKey_(new Date());
+  const scope = isAdmin_(me) ? 'all' : 'team';
+  let rows = [];
+
+  switch (tipo) {
+    case 'Vendas':
+      rows = [['Data', 'CPF', 'Produto', 'Quantidade', 'Atendente', 'Equipe', 'OBS']];
+      salesQuery_(me, scope, mk).forEach(function (s) {
+        rows.push([s.data, maskCpf_(s.cpf), s.produto, s.quantidade, userName_(s.userId), s.equipe, s.obs]);
+      });
+      break;
+
+    case 'Retenção':
+      rows = [['Data', 'CPF', 'Produto', 'Resultado', 'Atendente', 'Equipe', 'OBS']];
+      retentionQuery_(me, scope, mk).forEach(function (r) {
+        rows.push([r.data, maskCpf_(r.cpf), r.produto, r.resultado, userName_(r.userId), r.equipe, r.obs]);
+      });
+      break;
+
+    case 'Comissão':
+      rows = [['Atendente', 'Equipe', 'Comissão Vendas', 'Comissão Retenção', 'Total']];
+      teamMembers_(me).forEach(function (u) {
+        const c = commissionForUser_(u, mk);
+        rows.push([u.nome, u.equipe, c.totalVendas, c.totalRetencao, c.total]);
+      });
+      break;
+
+    case 'Performance':
+      rows = [['Atendente', 'Equipe', 'Vendas', '% Retenção Cartão', '% Retenção Conta', 'Comissão Total']];
+      teamMembers_(me).forEach(function (u) {
+        const st = retentionStats_(retentionQuery_(u, 'self', mk));
+        const c = commissionForUser_(u, mk);
+        rows.push([u.nome, u.equipe, sumQty_(salesQuery_(u, 'self', mk)), st.cartao.pctRetidos, st.conta.pctRetidos, c.total]);
+      });
+      break;
+
+    case 'Equipe':
+      rows = [['Nome', 'Email', 'Cargo', 'Equipe', 'Status']];
+      visibleUsers_(me).forEach(function (u) { rows.push([u.nome, u.email, u.cargo, u.equipe, u.status]); });
+      break;
+
+    case 'Ranking':
+      rows = [['Posição', 'Nome', 'Equipe', 'Vendas', '% Retenção']];
+      rankingBuild_(me, mk).top10.forEach(function (r) {
+        rows.push([r.posicao, r.nome, r.equipe, r.vendas, r.pctRetencao]);
+      });
+      break;
+
+    case 'Metas':
+      rows = [['Tipo', 'Alvo', 'Meta Vendas', 'Meta Comissão', 'Meta Retenção', 'Mês']];
+      readAll_(SHEETS.GOALS)
+        .filter(function (g) { return String(g.mes) === mk; })
+        .filter(function (g) { return isAdmin_(me) || goalVisible_(me, g); })
+        .forEach(function (g) {
+          rows.push([g.tipo, goalTargetName_(g), g.metaVendas, g.metaComissao, g.metaRetencao, g.mes]);
+        });
+      break;
   }
 
-  const goals = readAll_(SHEETS.GOALS);
-  const existing = goals.find(function (g) {
-    return g.tipo === data.tipo && String(g.alvoId) === String(data.alvoId) && String(g.mes) === mk;
+  // Registra a solicitação
+  appendRow_(SHEETS.REPORTS, {
+    id: uid_(), tipo: tipo, solicitante: me.email,
+    parametros: JSON.stringify({ mes: mk }), status: 'Gerado', criadoEm: nowIso_()
   });
+  audit_(me.email, 'REPORT', tipo + ' (' + mk + ')');
 
-  const payload = {
-    tipo: data.tipo,
-    alvoId: data.alvoId,
-    metaVendas: parseFloat(data.metaVendas) || 0,
-    metaComissao: parseFloat(data.metaComissao) || 0,
-    metaRetencao: parseFloat(data.metaRetencao) || 0,
-    mes: mk,
-    atualizadoEm: nowIso_()
-  };
+  const csv = rows.map(function (r) {
+    return r.map(function (c) { return '"' + String(c === undefined ? '' : c).replace(/"/g, '""') + '"'; }).join(';');
+  }).join('\r\n');
 
-  if (existing) {
-    updateRowById_(SHEETS.GOALS, existing.id, payload);
-  } else {
-    payload.id = uid_();
-    appendRow_(SHEETS.GOALS, payload);
-  }
-  audit_(me.email, 'GOAL_SET', data.tipo + ':' + data.alvoId + ' (' + mk + ')');
-  return true;
+  return { filename: 'portobank_' + tipo.toLowerCase() + '_' + mk + '.csv', csv: '\ufeff' + csv };
+}
+
+// ---------------- Helpers ----------------
+
+function teamMembers_(me) {
+  return visibleUsers_(me).filter(function (u) {
+    return u.status === 'Ativo' && ATTENDANT_ROLES.indexOf(u.cargo) !== -1;
+  });
+}
+
+function userName_(userId) {
+  const u = readAll_(SHEETS.USERS).find(function (x) { return String(x.id) === String(userId); });
+  return u ? u.nome : '(removido)';
+}
+
+function goalVisible_(me, g) {
+  if (g.tipo === 'team') return String(g.alvoId) === String(me.equipe);
+  const target = readAll_(SHEETS.USERS).find(function (u) { return String(u.id) === String(g.alvoId); });
+  return target && String(target.equipe) === String(me.equipe);
+}
+
+function goalTargetName_(g) {
+  return g.tipo === 'team' ? g.alvoId : userName_(g.alvoId);
 }

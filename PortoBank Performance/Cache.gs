@@ -1,123 +1,90 @@
 /**
  * ============================================================
- * PortoBank Performance — Retention.gs
+ * PortoBank Performance — Cache.gs
  * ------------------------------------------------------------
- * Registro e consulta de retenções.
- * Produtos e resultados válidos (ver RETENTION_PRODUCTS):
- *   Cartão de Crédito     → Retido | Cancelado | Retido por Argumentação
- *   Conta Digital         → Retido | Cancelado
- *   Cashback              → Cashback | Milhas
- *   Massificado - <prod>  → Retido por Argumentação | Retido por
- *                           Incentivo | Cancelado
- *   (produtos: Perda e Roubo, Identidade Protegida, Vida,
- *    Martelinho, RE — conforme PDF 6.5)
+ * Cache inteligente sobre CacheService.
+ *
+ * Estratégia:
+ *  - Leituras sempre tentam o cache primeiro (readAll_).
+ *  - Toda escrita invalida SOMENTE o cache da aba alterada.
+ *  - Valores grandes são divididos em chunks de 90KB
+ *    (limite do CacheService é 100KB por chave).
+ *  - Um "version token" por aba permite invalidação O(1).
  * ============================================================
  */
 
-/**
- * Registra uma nova retenção.
- * @param {Object} me
- * @param {Object} data {data, cpf, produto, resultado, obs}
- */
-function retentionCreate_(me, data) {
-  if (!data.data) throw new Error('Data é obrigatória.');
-  if (!isValidCpf_(data.cpf)) throw new Error('CPF inválido (11 dígitos).');
+const CACHE_PREFIX = 'pbp:';
+const CHUNK_SIZE = 90 * 1024; // 90KB por chunk
 
-  const results = RETENTION_PRODUCTS[data.produto];
-  if (!results) throw new Error('Produto de retenção inválido.');
-  if (results.indexOf(data.resultado) === -1) {
-    throw new Error('Resultado "' + data.resultado + '" não é válido para ' + data.produto + '.');
+/** Cache do script (compartilhado entre todos os usuários). */
+function cache_() {
+  return CacheService.getScriptCache();
+}
+
+/** Versão atual do cache de uma aba (muda a cada escrita). */
+function cacheVersion_(sheetName) {
+  const key = CACHE_PREFIX + 'v:' + sheetName;
+  let v = cache_().get(key);
+  if (!v) {
+    v = String(Date.now());
+    cache_().put(key, v, 21600); // 6h
   }
-
-  const ret = {
-    id: uid_(),
-    data: toDateKey_(data.data),
-    cpf: String(data.cpf).replace(/\D/g, ''),
-    produto: data.produto,
-    resultado: data.resultado,
-    obs: String(data.obs || '').trim(),
-    userId: me.id,
-    equipe: me.equipe,
-    criadoEm: nowIso_()
-  };
-  appendRow_(SHEETS.RETENTION, ret);
-  audit_(me.email, 'RETENTION_CREATE', ret.produto + ' → ' + ret.resultado);
-  return ret;
+  return v;
 }
 
 /**
- * Retenções do mês por escopo.
- * @param {Object} me
- * @param {string} scope 'self' | 'team' | 'all'
- * @param {string=} monthKey
+ * Recupera dados da aba do cache (ou null se ausente/expirado).
+ * @param {string} sheetName
+ * @return {Object[]|null}
  */
-function retentionQuery_(me, scope, monthKey) {
-  const mk = monthKey || toMonthKey_(new Date());
-  return readAll_(SHEETS.RETENTION).filter(function (r) {
-    if (toMonthKey_(r.data) !== mk) return false;
-    if (scope === 'self') return String(r.userId) === String(me.id);
-    if (scope === 'team') return String(r.equipe) === String(me.equipe);
-    return true;
-  });
+function cacheGet_(sheetName) {
+  const c = cache_();
+  const base = CACHE_PREFIX + cacheVersion_(sheetName) + ':' + sheetName;
+  const meta = c.get(base + ':n');
+  if (meta === null) return null;
+  const n = parseInt(meta, 10);
+  if (n === 0) return [];
+  const keys = [];
+  for (let i = 0; i < n; i++) keys.push(base + ':' + i);
+  const parts = c.getAll(keys);
+  let json = '';
+  for (let i = 0; i < n; i++) {
+    const part = parts[base + ':' + i];
+    if (part === undefined || part === null) return null; // chunk perdido → recarrega da planilha
+    json += part;
+  }
+  try { return JSON.parse(json); } catch (e) { return null; }
 }
 
 /**
- * Estatísticas de retenção por produto para um conjunto de linhas.
+ * Grava dados da aba no cache, em chunks.
+ * @param {string} sheetName
  * @param {Object[]} rows
- * @return {Object} métricas por produto
  */
-function retentionStats_(rows) {
-  const byProduct = {};
-  Object.keys(RETENTION_PRODUCTS).forEach(function (p) {
-    byProduct[p] = { atendidos: 0, retidos: 0, argumentados: 0, incentivos: 0, cancelados: 0, cashback: 0, milhas: 0 };
-  });
-  rows.forEach(function (r) {
-    const s = byProduct[r.produto];
-    if (!s) return;
-    s.atendidos++;
-    if (r.resultado === 'Retido') s.retidos++;
-    if (r.resultado === 'Retido por Argumentação') { s.retidos++; s.argumentados++; }
-    if (r.resultado === 'Retido por Incentivo') { s.retidos++; s.incentivos++; }
-    if (r.resultado === 'Cancelado') s.cancelados++;
-    if (r.resultado === 'Cashback') s.cashback++;
-    if (r.resultado === 'Milhas') s.milhas++;
-  });
+function cachePut_(sheetName, rows) {
+  const c = cache_();
+  const base = CACHE_PREFIX + cacheVersion_(sheetName) + ':' + sheetName;
+  const json = JSON.stringify(rows);
+  const chunks = {};
+  let n = 0;
+  for (let i = 0; i < json.length; i += CHUNK_SIZE) {
+    chunks[base + ':' + n] = json.slice(i, i + CHUNK_SIZE);
+    n++;
+  }
+  chunks[base + ':n'] = String(n);
+  c.putAll(chunks, CACHE_TTL);
+}
 
-  const cc = byProduct['Cartão de Crédito'];
-  const cd = byProduct['Conta Digital'];
-  const cb = byProduct['Cashback'];
+/**
+ * Invalida o cache de UMA aba (troca o version token).
+ * Escritas nunca apagam caches de outras abas.
+ * @param {string} sheetName
+ */
+function cacheInvalidate_(sheetName) {
+  cache_().put(CACHE_PREFIX + 'v:' + sheetName, String(Date.now()), 21600);
+}
 
-  // Massificados: agrega todos os produtos "Massificado - *"
-  const ms = { atendidos: 0, retidos: 0, argumentados: 0, incentivos: 0, cancelados: 0 };
-  Object.keys(byProduct).forEach(function (p) {
-    if (p.indexOf(MASSIFICADO_PREFIX) !== 0) return;
-    const s = byProduct[p];
-    ms.atendidos += s.atendidos; ms.retidos += s.retidos;
-    ms.argumentados += s.argumentados; ms.incentivos += s.incentivos;
-    ms.cancelados += s.cancelados;
-  });
-
-  return {
-    cartao: {
-      atendidos: cc.atendidos, retidos: cc.retidos, argumentados: cc.argumentados, cancelados: cc.cancelados,
-      pctRetidos: pct_(cc.retidos, cc.atendidos),
-      pctArgumentacao: pct_(cc.argumentados, cc.atendidos),
-      pctCancelados: pct_(cc.cancelados, cc.atendidos)
-    },
-    conta: {
-      atendidos: cd.atendidos, retidos: cd.retidos, cancelados: cd.cancelados,
-      pctRetidos: pct_(cd.retidos, cd.atendidos),
-      pctCancelados: pct_(cd.cancelados, cd.atendidos)
-    },
-    cashback: {
-      atendidos: cb.atendidos, cashback: cb.cashback, milhas: cb.milhas,
-      pctCashback: pct_(cb.cashback, cb.atendidos),
-      pctMilhas: pct_(cb.milhas, cb.atendidos)
-    },
-    massificado: {
-      atendidos: ms.atendidos, retidos: ms.retidos, argumentados: ms.argumentados,
-      incentivos: ms.incentivos, cancelados: ms.cancelados,
-      pctRetidos: pct_(ms.retidos, ms.atendidos)
-    }
-  };
+/** Limpa todo o cache do sistema (uso administrativo). */
+function cacheFlushAll_() {
+  Object.keys(SHEETS).forEach(function (k) { cacheInvalidate_(SHEETS[k]); });
 }

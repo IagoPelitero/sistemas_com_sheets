@@ -1,293 +1,223 @@
 /**
  * ============================================================
- * PortoBank Performance — Commission.gs
+ * PortoBank Performance — Config.gs
  * ------------------------------------------------------------
- * Cálculo automático de comissões.
+ * Constantes globais, nomes de planilhas, cargos, permissões
+ * e parâmetros padrão do sistema (seed).
  *
- * FONTES DAS REGRAS
- * ─ Cartão de Crédito (FONE): especificação do sistema
- *     73% → R$150 | 74% → R$180 | 75% → R$200
- *     Bônus argumentação: 35–37% → +100 | 38–39% → +150 | ≥40% → +200
- *     Bônus premium: 76%/42% → 100 | 78%/44% → 200 (prevalece o maior)
- * ─ Demais regras: PDF "Programa de Remuneração Variável"
- *   (vigência 01/01/2026):
- *     6.3.1 Vendas coletivas por faixa de atingimento
- *           (até 60 | 60–79,99 | 80–100 | >100) — sem teto
- *     6.3.2 Cartão digital: Argumentação R$1,50 e Incentivo R$0,50
- *           por retido (pontos 1,5/0,5 × R$1,00) + Cashback por
- *           faixa (36%→50 | 39%→70 | 42%→100 | 45%→130)
- *     6.4   Teto do bloco de retenção: R$530
- *     6.5   Retenção de massificados por faixa de conversão,
- *           separada em Argumentação e Incentivo, por produto
- *     6.6   Conta Digital: 30%→100 | 50%→150 | 75%→200
- *           Bônus: 76%→+100 | 78%→+150
- *     Indicadores: CPCP R$30 | Upgrade Platinum R$2 |
- *           Upgrade Black/Infinite R$4 (valor unitário do produto)
- *
- * Todas as regras vêm da aba Settings → alteráveis sem código.
+ * Toda alteração estrutural deve ser feita AQUI, nunca
+ * espalhada pelos módulos.
  * ============================================================
  */
 
-/** Lê um valor de configuração (com fallback no seed). */
-function settingGet_(key) {
-  const rows = readAll_(SHEETS.SETTINGS);
-  const found = rows.find(function (r) { return String(r.chave) === key; });
-  const raw = found ? found.valor : DEFAULT_SETTINGS[key];
-  return raw;
-}
+/** Nome das abas (sheets) usadas como banco de dados. */
+const SHEETS = {
+  USERS: 'Users',
+  SALES: 'Sales',
+  RETENTION: 'Retention',
+  GOALS: 'Goals',
+  SETTINGS: 'Settings',
+  PRODUCTS: 'Products',
+  TEAMS: 'Teams',
+  REPORTS: 'Reports',
+  AUDIT: 'Audit'
+};
 
-/** Lê configuração JSON. */
-function settingJson_(key) {
-  try { return JSON.parse(settingGet_(key)); } catch (e) { return JSON.parse(DEFAULT_SETTINGS[key]); }
-}
+/** Cabeçalhos oficiais de cada aba. NUNCA reordenar sem migração. */
+const HEADERS = {
+  [SHEETS.USERS]: ['id', 'nome', 'email', 'cargo', 'equipe', 'status', 'tema', 'criadoEm', 'atualizadoEm'],
+  [SHEETS.SALES]: ['id', 'data', 'cpf', 'produto', 'quantidade', 'obs', 'userId', 'equipe', 'criadoEm'],
+  [SHEETS.RETENTION]: ['id', 'data', 'cpf', 'produto', 'resultado', 'obs', 'userId', 'equipe', 'criadoEm'],
+  [SHEETS.GOALS]: ['id', 'tipo', 'alvoId', 'metaVendas', 'metaComissao', 'metaRetencao', 'mes', 'atualizadoEm'],
+  [SHEETS.SETTINGS]: ['chave', 'valor', 'descricao', 'atualizadoEm'],
+  [SHEETS.PRODUCTS]: ['id', 'nome', 'categoria', 'comissaoUnitaria', 'ativo'],
+  [SHEETS.TEAMS]: ['id', 'nome', 'supervisorId', 'tipo', 'ativo'],
+  [SHEETS.REPORTS]: ['id', 'tipo', 'solicitante', 'parametros', 'status', 'criadoEm'],
+  [SHEETS.AUDIT]: ['id', 'quando', 'quem', 'acao', 'detalhe']
+};
 
-/** Lê configuração numérica. */
-function settingNum_(key) {
-  const n = parseFloat(settingGet_(key));
-  return isNaN(n) ? 0 : n;
-}
+/** Cargos oficiais do sistema (exatamente como especificado). */
+const ROLES = {
+  ADMIN: 'ADMIN',
+  SUP_VENDAS: 'Supervisor de vendas',
+  SUP_RET_FONE: 'Supervisor de retenção e vendas fone',
+  SUP_RET_DIGITAL: 'Supervisor de vendas e retenção digital',
+  AT_VENDAS: 'Atendente de vendas',
+  AT_VENDAS_RET_FONE: 'Atendente de vendas e retenção fone',
+  AT_RET_DIGITAL: 'Atendente de retenção e vendas digital'
+};
 
-/** Arredonda em 2 casas. */
-function round2_(v) { return Math.round(v * 100) / 100; }
-
-/**
- * Índice da faixa de atingimento das vendas coletivas (PDF 6.3.1).
- * até 60 → 0 | 60–79,99 → 1 | 80–100 → 2 | acima de 100 → 3
- */
-function vendasFaixaIdx_(atingimento) {
-  if (atingimento < 60) return 0;
-  if (atingimento < 80) return 1;
-  if (atingimento <= 100) return 2;
-  return 3;
-}
-
-/**
- * Comissão de VENDAS (PDF 6.3.1 + indicadores).
- * Produtos da tabela coletiva: R$/venda conforme a faixa de
- * atingimento do mês (chave comissao.vendas.atingimentoColetivo,
- * atualizada mensalmente pelo ADMIN). Sem teto.
- * Produtos fora da tabela (CPCP, Upgrades, novos): valor unitário
- * cadastrado no produto.
- * @param {Object[]} sales
- * @return {Object} {total, detalhes[]}
- */
-function commissionVendas_(sales) {
-  const tabela = settingJson_('comissao.vendas.tabela');
-  const idx = vendasFaixaIdx_(settingNum_('comissao.vendas.atingimentoColetivo'));
-
-  const products = readAll_(SHEETS.PRODUCTS);
-  const unitario = {};
-  products.forEach(function (p) { unitario[p.nome] = parseFloat(p.comissaoUnitaria) || 0; });
-
-  let total = 0;
-  const porProduto = {};
-  sales.forEach(function (s) {
-    const qtd = parseInt(s.quantidade, 10) || 1;
-    const unit = tabela[s.produto] ? (parseFloat(tabela[s.produto][idx]) || 0)
-      : (unitario[s.produto] !== undefined ? unitario[s.produto] : 0);
-    total += unit * qtd;
-    porProduto[s.produto] = round2_((porProduto[s.produto] || 0) + unit * qtd);
-  });
-
-  const detalhes = Object.keys(porProduto).map(function (p) { return p + ' → R$' + porProduto[p].toFixed(2); });
-  return { total: round2_(total), faixaIdx: idx, detalhes: detalhes };
-}
+const SUPERVISOR_ROLES = [ROLES.SUP_VENDAS, ROLES.SUP_RET_FONE, ROLES.SUP_RET_DIGITAL];
+const ATTENDANT_ROLES = [ROLES.AT_VENDAS, ROLES.AT_VENDAS_RET_FONE, ROLES.AT_RET_DIGITAL];
 
 /**
- * Comissão de Cartão de Crédito FONE (faixas + bônus).
- * @param {Object} cartao stats.cartao (ver retentionStats_)
+ * Mapa de permissões por cargo.
+ * Cada chave "pages" define quais abas do menu o cargo enxerga.
  */
-function commissionCartaoFone_(cartao) {
-  const detalhes = [];
-  let base = 0, bonusArg = 0, bonusPremium = 0;
-
-  // Faixas base: aplica a MAIOR faixa atingida
-  settingJson_('comissao.cartaoFone.tiers').forEach(function (t) {
-    if (cartao.pctRetidos >= t.pct) { base = t.valor; }
-  });
-  if (base > 0) detalhes.push('Base ' + cartao.pctRetidos + '% retidos → R$' + base);
-
-  // Bônus por argumentação
-  settingJson_('comissao.cartaoFone.bonusArg').forEach(function (b) {
-    if (cartao.pctArgumentacao >= b.min && cartao.pctArgumentacao <= b.max && b.valor > bonusArg) {
-      bonusArg = b.valor;
-    }
-  });
-  // Regra "=40%": qualquer valor ≥ 40 mantém o bônus máximo da tabela
-  const arg = settingJson_('comissao.cartaoFone.bonusArg');
-  const topArg = arg[arg.length - 1];
-  if (cartao.pctArgumentacao >= topArg.min) bonusArg = Math.max(bonusArg, topArg.valor);
-  if (bonusArg > 0) detalhes.push('Bônus argumentação ' + cartao.pctArgumentacao + '% → +R$' + bonusArg);
-
-  // Bônus premium (prevalece o maior atingido)
-  settingJson_('comissao.cartaoFone.bonusPremium').forEach(function (p) {
-    if (cartao.pctRetidos >= p.retidos && cartao.pctArgumentacao >= p.argumentacao && p.valor > bonusPremium) {
-      bonusPremium = p.valor;
-    }
-  });
-  if (bonusPremium > 0) detalhes.push('Bônus premium → +R$' + bonusPremium);
-
-  return { base: base, bonusArg: bonusArg, bonusPremium: bonusPremium, total: base + bonusArg + bonusPremium, detalhes: detalhes };
-}
-
-/**
- * Pontos e valor do Cartão de Crédito DIGITAL (PDF 6.3.2).
- * Argumentação = 1,5 pt (R$1,50) | Incentivo = 0,5 pt (R$0,50).
- * Somente Cartão possui regra de pontos.
- * @param {Object[]} rows Retenções do usuário no mês.
- */
-function commissionCartaoDigital_(rows) {
-  const ptInc = settingNum_('comissao.cartaoDigital.pontoIncentivo');   // 0.5
-  const ptArg = settingNum_('comissao.cartaoDigital.pontoArgumentacao'); // 1.5
-  const valorPonto = settingNum_('comissao.cartaoDigital.valorPonto');   // R$1,00
-
-  let pontos = 0;
-  rows.forEach(function (r) {
-    if (r.produto !== 'Cartão de Crédito') return;
-    if (r.resultado === 'Retido') pontos += ptInc; // retenção por incentivo
-    if (r.resultado === 'Retido por Argumentação') pontos += ptArg;
-  });
-  return { pontos: pontos, valor: round2_(pontos * valorPonto) };
-}
-
-/**
- * Prêmio de CASHBACK (PDF 6.3.2) — valor fixo pela maior faixa
- * de conversão atingida: 36%→50 | 39%→70 | 42%→100 | 45%→130.
- * Conversão = retenções via Cashback ÷ total de casos Cashback/Milhas.
- * @param {Object} cb stats.cashback
- */
-function commissionCashback_(cb) {
-  let premio = 0;
-  settingJson_('comissao.cashback.faixas').forEach(function (f) {
-    if (cb.pctCashback >= f.pct && f.valor > premio) premio = f.valor;
-  });
-  return { premio: premio, pct: cb.pctCashback };
-}
-
-/**
- * Prêmio de CONTA DIGITAL (PDF 6.6) — valor fixo pela maior faixa
- * de retenção atingida (30/50/75%) + bônus (76/78%).
- * @param {Object} conta stats.conta
- */
-function commissionContaDigital_(conta) {
-  let premio = 0, bonus = 0;
-  settingJson_('comissao.contaDigital.faixas').forEach(function (f) {
-    if (conta.pctRetidos >= f.pct && f.valor > premio) premio = f.valor;
-  });
-  settingJson_('comissao.contaDigital.bonus').forEach(function (b) {
-    if (conta.pctRetidos >= b.pct && b.valor > bonus) bonus = b.valor;
-  });
-  return { premio: premio, bonus: bonus, total: premio + bonus, pct: conta.pctRetidos };
-}
-
-/**
- * Retenção de MASSIFICADOS (PDF 6.5).
- * Para cada produto massificado, paga-se R$/retido conforme a
- * faixa de conversão atingida no mês — tabelas separadas para
- * Argumentação (faixas 15/30/50/60%) e Incentivo (60/65/70/75%).
- * Conversão calculada por produto e por tipo:
- *   convArg = retidos por argumentação ÷ casos do produto
- *   convInc = retidos por incentivo    ÷ casos do produto
- * Abaixo da primeira faixa não há pagamento.
- * @param {Object[]} rows Retenções do usuário no mês.
- */
-function commissionMassificados_(rows) {
-  const faixasArg = settingJson_('comissao.massificados.faixasArg');
-  const faixasInc = settingJson_('comissao.massificados.faixasInc');
-  const tabArg = settingJson_('comissao.massificados.arg');
-  const tabInc = settingJson_('comissao.massificados.inc');
-
-  // Agrupa por produto massificado
-  const grupos = {};
-  rows.forEach(function (r) {
-    if (String(r.produto).indexOf(MASSIFICADO_PREFIX) !== 0) return;
-    const nome = String(r.produto).replace(MASSIFICADO_PREFIX + ' - ', '');
-    if (!grupos[nome]) grupos[nome] = { total: 0, arg: 0, inc: 0 };
-    grupos[nome].total++;
-    if (r.resultado === 'Retido por Argumentação') grupos[nome].arg++;
-    if (r.resultado === 'Retido por Incentivo') grupos[nome].inc++;
-  });
-
-  function faixaIdx_(conv, faixas) {
-    let idx = -1;
-    faixas.forEach(function (f, i) { if (conv >= f) idx = i; });
-    return idx; // -1 = abaixo da primeira faixa → sem pagamento
+const PERMISSIONS = {
+  [ROLES.ADMIN]: {
+    pages: ['dashboard', 'novaVenda', 'novaRetencao', 'equipe', 'ranking', 'gestao', 'relatorios', 'cadastro', 'configuracoes'],
+    scope: 'all', canManageUsers: true, canEditGoals: true, canEditSettings: true, canReports: true
+  },
+  [ROLES.SUP_VENDAS]: {
+    pages: ['dashboard', 'novaVenda', 'equipe', 'ranking', 'gestao', 'relatorios'],
+    scope: 'team', canManageUsers: true, canEditGoals: true, canEditSettings: false, canReports: true
+  },
+  [ROLES.SUP_RET_FONE]: {
+    pages: ['dashboard', 'novaVenda', 'novaRetencao', 'equipe', 'ranking', 'gestao', 'relatorios'],
+    scope: 'team', canManageUsers: true, canEditGoals: true, canEditSettings: false, canReports: true
+  },
+  [ROLES.SUP_RET_DIGITAL]: {
+    pages: ['dashboard', 'novaVenda', 'novaRetencao', 'equipe', 'ranking', 'gestao', 'relatorios'],
+    scope: 'team', canManageUsers: true, canEditGoals: true, canEditSettings: false, canReports: true
+  },
+  [ROLES.AT_VENDAS]: {
+    pages: ['dashboard', 'novaVenda', 'equipe', 'ranking'],
+    scope: 'self', canManageUsers: false, canEditGoals: false, canEditSettings: false, canReports: false
+  },
+  [ROLES.AT_VENDAS_RET_FONE]: {
+    pages: ['dashboard', 'novaVenda', 'novaRetencao', 'equipe', 'ranking'],
+    scope: 'self', canManageUsers: false, canEditGoals: false, canEditSettings: false, canReports: false
+  },
+  [ROLES.AT_RET_DIGITAL]: {
+    pages: ['dashboard', 'novaVenda', 'novaRetencao', 'equipe', 'ranking'],
+    scope: 'self', canManageUsers: false, canEditGoals: false, canEditSettings: false, canReports: false
   }
+};
 
-  let total = 0;
-  const detalhes = [];
-  Object.keys(grupos).forEach(function (nome) {
-    const g = grupos[nome];
-    const convArg = pct_(g.arg, g.total);
-    const convInc = pct_(g.inc, g.total);
-    const iArg = faixaIdx_(convArg, faixasArg);
-    const iInc = faixaIdx_(convInc, faixasInc);
-    const vArg = (iArg >= 0 && tabArg[nome]) ? (parseFloat(tabArg[nome][iArg]) || 0) * g.arg : 0;
-    const vInc = (iInc >= 0 && tabInc[nome]) ? (parseFloat(tabInc[nome][iInc]) || 0) * g.inc : 0;
-    total += vArg + vInc;
-    if (vArg > 0) detalhes.push(nome + ' arg ' + convArg + '% × ' + g.arg + ' → R$' + round2_(vArg).toFixed(2));
-    if (vInc > 0) detalhes.push(nome + ' inc ' + convInc + '% × ' + g.inc + ' → R$' + round2_(vInc).toFixed(2));
-  });
+/** Produtos de retenção e seus resultados válidos. */
+const RETENTION_PRODUCTS = {
+  'Cartão de Crédito': ['Retido', 'Cancelado', 'Retido por Argumentação'],
+  'Conta Digital': ['Retido', 'Cancelado'],
+  'Cashback': ['Cashback', 'Milhas'],
+  'Massificado - Perda e Roubo': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
+  'Massificado - Identidade Protegida': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
+  'Massificado - Vida': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
+  'Massificado - Martelinho': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
+  'Massificado - RE': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado']
+};
 
-  return { total: round2_(total), detalhes: detalhes };
-}
+/** Prefixo que identifica retenção de massificados. */
+const MASSIFICADO_PREFIX = 'Massificado';
 
 /**
- * Comissão total de um usuário no mês (vendas + retenção).
- * Teto do PDF 6.4 (R$530) aplicado ao bloco 6.3.2:
- * pontos do cartão (argumentação + incentivo) + prêmio de cashback.
- * @param {Object} user
- * @param {string=} monthKey
- * @return {Object} composição completa da comissão
+ * SEED de configurações de comissão.
+ * Regras de Cartão de Crédito (FONE) seguem a especificação do sistema.
+ * Demais regras seguem o PDF oficial "Programa de Remuneração
+ * Variável" (vigência 01/01/2026) — tudo editável em Configurações.
  */
-function commissionForUser_(user, monthKey) {
-  const mk = monthKey || toMonthKey_(new Date());
-  const sales = salesQuery_(user, 'self', mk);
-  const rets = retentionQuery_(user, 'self', mk);
-  const stats = retentionStats_(rets);
+const DEFAULT_SETTINGS = {
+  // ---- Cartão de Crédito (FONE): faixas de % retidos → R$ ----
+  'comissao.cartaoFone.tiers': JSON.stringify([
+    { pct: 73, valor: 150 },
+    { pct: 74, valor: 180 },
+    { pct: 75, valor: 200 }
+  ]),
+  // ---- Bônus por Argumentação (FONE) ----
+  'comissao.cartaoFone.bonusArg': JSON.stringify([
+    { min: 35, max: 37, valor: 100 },
+    { min: 38, max: 39, valor: 150 },
+    { min: 40, max: 40, valor: 200 }
+  ]),
+  // ---- Bônus Premium (FONE) ----
+  'comissao.cartaoFone.bonusPremium': JSON.stringify([
+    { retidos: 76, argumentacao: 42, valor: 100 },
+    { retidos: 78, argumentacao: 44, valor: 200 }
+  ]),
+  // ---- Cartão de Crédito (DIGITAL): pontos ----
+  // PDF 6.3.2: Argumentação R$1,50/retido (1,5 pt) e Incentivo
+  // Financeiro R$0,50/retido (0,5 pt) → valor do ponto = R$1,00.
+  'comissao.cartaoDigital.pontoIncentivo': '0.5',
+  'comissao.cartaoDigital.pontoArgumentacao': '1.5',
+  'comissao.cartaoDigital.valorPonto': '1',
+  // ---- Cashback (PDF 6.3.2): prêmio fixo por faixa de conversão ----
+  'comissao.cashback.faixas': JSON.stringify([
+    { pct: 36, valor: 50 },
+    { pct: 39, valor: 70 },
+    { pct: 42, valor: 100 },
+    { pct: 45, valor: 130 }
+  ]),
+  // ---- Teto do bloco de retenção (PDF 6.4): argumentação +
+  //      incentivo + cashback somados não passam de R$530 ----
+  'comissao.retencao.teto': '530',
+  // ---- Conta Digital (PDF 6.6): prêmio fixo por % de retenção ----
+  'comissao.contaDigital.faixas': JSON.stringify([
+    { pct: 30, valor: 100 },
+    { pct: 50, valor: 150 },
+    { pct: 75, valor: 200 }
+  ]),
+  'comissao.contaDigital.bonus': JSON.stringify([
+    { pct: 76, valor: 100 },
+    { pct: 78, valor: 150 }
+  ]),
+  // ---- Vendas coletivas (PDF 6.3.1): R$/venda por faixa de
+  //      atingimento da meta coletiva do mês.
+  //      Faixas: [até 60% | 60–79,99% | 80–100% | acima de 100%]
+  //      Sem teto de pagamento. ----
+  'comissao.vendas.tabela': JSON.stringify({
+    'Seguro Perda e Roubo':   [2.00, 2.50, 3.00, 4.00],
+    'Adicional':              [1.00, 1.50, 2.00, 3.00],
+    'Seguro Vida':            [1.00, 1.50, 2.00, 3.00],
+    'Identidade Protegida':   [1.00, 1.50, 2.00, 3.00],
+    'Seguro RE':              [1.00, 1.50, 2.00, 3.00],
+    'Martelinho de Ouro':     [3.00, 3.50, 4.00, 5.00],
+    'Guincho':                [3.00, 3.50, 4.00, 5.00],
+    'Quitação fatura':        [2.00, 2.50, 3.00, 4.00]
+  }),
+  // % de atingimento da meta coletiva do mês (o ADMIN atualiza
+  // mensalmente conforme divulgação da operação; define a faixa).
+  'comissao.vendas.atingimentoColetivo': '80',
+  // ---- Retenção de Massificados (PDF 6.5): R$/retido por faixa
+  //      de conversão, separado por Argumentação e Incentivo ----
+  'comissao.massificados.faixasArg': JSON.stringify([15, 30, 50, 60]),
+  'comissao.massificados.faixasInc': JSON.stringify([60, 65, 70, 75]),
+  'comissao.massificados.arg': JSON.stringify({
+    'Perda e Roubo':        [1.50, 2.00, 2.50, 3.00],
+    'Identidade Protegida': [1.50, 2.00, 2.50, 3.00],
+    'Vida':                 [1.50, 2.00, 2.50, 3.00],
+    'Martelinho':           [1.00, 1.50, 2.00, 2.50],
+    'RE':                   [1.00, 1.50, 2.00, 2.50]
+  }),
+  'comissao.massificados.inc': JSON.stringify({
+    'Perda e Roubo':        [1.00, 1.25, 1.50, 2.00],
+    'Identidade Protegida': [1.00, 1.25, 1.50, 2.00],
+    'Vida':                 [1.00, 1.25, 1.50, 2.00],
+    'RE':                   [1.00, 1.10, 1.25, 1.50],
+    'Martelinho':           [1.00, 1.10, 1.20, 1.30]
+  }),
+  // ---- Metas padrão ----
+  'meta.padrao.vendas': '50',
+  'meta.padrao.comissao': '1500',
+  'meta.padrao.retencao': '75',
+  // ---- Sistema ----
+  'sistema.nome': 'PortoBank Performance',
+  'sistema.versao': '1.1.0'
+};
 
-  const isDigital = user.cargo === ROLES.AT_RET_DIGITAL || user.cargo === ROLES.SUP_RET_DIGITAL;
-  const digital = commissionCartaoDigital_(rets);
-  const cartao = isDigital
-    ? { base: 0, bonusArg: 0, bonusPremium: 0, total: digital.valor, pontos: digital.pontos, detalhes: ['Pontuação digital: ' + digital.pontos + ' pts'] }
-    : commissionCartaoFone_(stats.cartao);
+/**
+ * Produtos padrão (seed) — mix do PDF 6.3.1 + indicadores 
+ * de valor fixo (CPCP e Upgrades).
+ * Produtos da tabela de vendas coletivas têm o valor resolvido
+ * pela faixa de atingimento; indicadores usam comissaoUnitaria.
+ */
+const DEFAULT_PRODUCTS = [
+  { nome: 'Seguro Perda e Roubo', categoria: 'Massificado' },
+  { nome: 'Adicional', categoria: 'Massificado' },
+  { nome: 'Seguro Vida', categoria: 'Massificado' },
+  { nome: 'Identidade Protegida', categoria: 'Massificado' },
+  { nome: 'Seguro RE', categoria: 'Massificado' },
+  { nome: 'Martelinho de Ouro', categoria: 'Massificado' },
+  { nome: 'Guincho', categoria: 'Massificado' },
+  { nome: 'Quitação fatura', categoria: 'Massificado' },
+  // Indicadores de valor fixo (PDF):
+  // CPCP pago somente com proposta formalizada após contato + envio do link.
+  { nome: 'CPCP', categoria: 'Indicador', comissaoUnitaria: 30 },
+  { nome: 'Upgrade Platinum', categoria: 'Indicador', comissaoUnitaria: 2 },
+  { nome: 'Upgrade Black/Infinite', categoria: 'Indicador', comissaoUnitaria: 4 }
+];
 
-  const cashback = commissionCashback_(stats.cashback);
-  const conta = commissionContaDigital_(stats.conta);
-  const mass = commissionMassificados_(rets);
-  const vendas = commissionVendas_(sales);
+/** Temas disponíveis. */
+const THEMES = ['portobank', 'rosa', 'brasil', 'dark'];
 
-  // Teto do bloco de retenção (PDF 6.4) — argumentação + incentivo
-  // (pontos do cartão digital) + cashback, limitados a R$530.
-  const teto = settingNum_('comissao.retencao.teto');
-  const nucleoBruto = (isDigital ? digital.valor : 0) + cashback.premio;
-  const nucleo = teto > 0 ? Math.min(nucleoBruto, teto) : nucleoBruto;
-  const cartaoAjustado = isDigital ? Math.max(0, nucleo - cashback.premio) : cartao.total;
-  const cashbackAjustado = isDigital ? Math.min(cashback.premio, nucleo) : cashback.premio;
-
-  const totalRetencao = round2_(
-    (isDigital ? cartaoAjustado : cartao.total) +
-    cashbackAjustado + conta.total + mass.total
-  );
-  const total = round2_(vendas.total + totalRetencao);
-
-  return {
-    mes: mk,
-    cartao: cartao,
-    cashback: cashback,
-    contaDigital: conta,
-    massificados: mass,
-    vendas: vendas,
-    // compatibilidade com o painel:
-    globais: {
-      vendas: vendas.total,
-      contaDigital: conta.total,
-      retencaoMassificados: mass.total,
-      conversaoMilhasCashback: cashbackAjustado
-    },
-    tetoRetencaoAplicado: nucleoBruto > nucleo,
-    totalVendas: vendas.total,
-    totalRetencao: totalRetencao,
-    total: total
-  };
-}
+/** TTL do cache em segundos. */
+const CACHE_TTL = 300; // 5 minutos (invalidado automaticamente em toda escrita)

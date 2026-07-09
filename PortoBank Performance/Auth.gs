@@ -1,67 +1,99 @@
 /**
  * ============================================================
- * PortoBank Performance — Ranking.gs
+ * PortoBank Performance — Auth.gs
  * ------------------------------------------------------------
- * TOP 10 com ordenação automática.
- * Supervisor: ranking da própria equipe (com nomes).
- * ADMIN: ranking geral.
- * Atendente: ranking da equipe SEM nomes (anonimizado),
- * destacando a própria posição.
+ * Autenticação via conta Google (Session) + REGRA DO
+ * PRIMEIRO LOGIN:
+ *
+ *   Se NÃO existir nenhum usuário cadastrado, o primeiro
+ *   login cria automaticamente o usuário como ADMIN e o
+ *   registra normalmente na aba Users (visível, sem exceções).
  * ============================================================
  */
 
 /**
- * Monta o ranking TOP 10 do mês.
- * @param {Object} me
- * @param {string=} monthKey
+ * Retorna o e-mail do usuário logado no Google.
+ * @return {string}
  */
-function rankingBuild_(me, monthKey) {
-  const mk = monthKey || toMonthKey_(new Date());
-  const showNames = isAdmin_(me) || isSupervisor_(me);
-  const users = visibleUsers_(me).filter(function (u) { return u.status === 'Ativo'; });
+function getSessionEmail_() {
+  const email = Session.getActiveUser().getEmail();
+  if (!email) {
+    throw new Error('Não foi possível identificar sua conta Google. Verifique o modo de publicação do Web App.');
+  }
+  return email.toLowerCase().trim();
+}
 
-  const sales = salesQuery_(me, isAdmin_(me) ? 'all' : 'team', mk);
-  const rets = retentionQuery_(me, isAdmin_(me) ? 'all' : 'team', mk);
+/**
+ * Resolve o usuário atual. Aplica a regra do primeiro login.
+ * @return {Object} usuário (linha da aba Users)
+ */
+function getCurrentUser_() {
+  const email = getSessionEmail_();
+  const users = readAll_(SHEETS.USERS);
 
-  const salesByUser = {}, retsByUser = {};
-  sales.forEach(function (s) { salesByUser[s.userId] = (salesByUser[s.userId] || 0) + (parseInt(s.quantidade, 10) || 1); });
-  rets.forEach(function (r) {
-    if (!retsByUser[r.userId]) retsByUser[r.userId] = { atendidos: 0, retidos: 0 };
-    retsByUser[r.userId].atendidos++;
-    if (r.resultado === 'Retido' || r.resultado === 'Retido por Argumentação') retsByUser[r.userId].retidos++;
-  });
+  // ---- PRIMEIRO LOGIN: nenhum usuário cadastrado ----
+  if (users.length === 0) {
+    const admin = {
+      id: uid_(),
+      nome: email.split('@')[0],
+      email: email,
+      cargo: ROLES.ADMIN,
+      equipe: 'Administração',
+      status: 'Ativo',
+      tema: 'portobank',
+      criadoEm: nowIso_(),
+      atualizadoEm: nowIso_()
+    };
+    appendRow_(SHEETS.USERS, admin); // registrado NORMALMENTE na aba Users
+    ensureDefaultSettings_();         // popula comissões/produtos padrão
+    audit_(email, 'BOOTSTRAP', 'Primeiro login: ADMIN criado automaticamente');
+    return admin;
+  }
 
-  const rows = users
-    .filter(function (u) { return ATTENDANT_ROLES.indexOf(u.cargo) !== -1 || isAdmin_(me); })
-    .map(function (u) {
-      const r = retsByUser[u.id] || { atendidos: 0, retidos: 0 };
-      const vendas = salesByUser[u.id] || 0;
-      const pctRet = pct_(r.retidos, r.atendidos);
-      return {
-        userId: u.id,
-        nome: showNames ? u.nome : null,
-        equipe: u.equipe,
-        vendas: vendas,
-        pctRetencao: pctRet,
-        score: vendas + pctRet // pontuação combinada para ordenação
-      };
-    })
-    .sort(function (a, b) { return b.score - a.score; }); // ordenação automática
+  const user = users.find(function (u) { return String(u.email).toLowerCase().trim() === email; });
+  if (!user) {
+    throw new Error('ACCESS_DENIED: Seu e-mail (' + email + ') não está cadastrado. Solicite acesso ao seu supervisor ou ADMIN.');
+  }
+  if (String(user.status) !== 'Ativo') {
+    throw new Error('ACCESS_DENIED: Seu usuário está inativo. Contate o ADMIN.');
+  }
+  return user;
+}
 
-  const myPos = rows.findIndex(function (r) { return String(r.userId) === String(me.id); }) + 1;
+/**
+ * Permissões do cargo do usuário.
+ * @param {Object} user
+ * @return {Object}
+ */
+function getPermissions_(user) {
+  return PERMISSIONS[user.cargo] || PERMISSIONS[ROLES.AT_VENDAS];
+}
 
-  return {
-    mes: mk,
-    minhaPosicao: myPos > 0 ? myPos : null,
-    top10: rows.slice(0, 10).map(function (r, i) {
-      return {
-        posicao: i + 1,
-        nome: showNames ? r.nome : (String(r.userId) === String(me.id) ? 'Você' : 'Colega'),
-        equipe: r.equipe,
-        vendas: r.vendas,
-        pctRetencao: r.pctRetencao,
-        propria: String(r.userId) === String(me.id)
-      };
-    })
-  };
+/** true se o usuário é ADMIN. */
+function isAdmin_(user) { return user.cargo === ROLES.ADMIN; }
+
+/** true se o usuário é supervisor (qualquer tipo). */
+function isSupervisor_(user) { return SUPERVISOR_ROLES.indexOf(user.cargo) !== -1; }
+
+/**
+ * Garante que `user` possa gerenciar `target` (escopo).
+ * ADMIN: tudo. Supervisor: apenas a própria equipe.
+ * @throws {Error} se não autorizado.
+ */
+function assertCanManage_(user, target) {
+  if (isAdmin_(user)) return;
+  if (isSupervisor_(user) && String(target.equipe) === String(user.equipe)) return;
+  throw new Error('Sem permissão para gerenciar este usuário.');
+}
+
+/**
+ * Filtra usuários visíveis conforme o escopo do solicitante.
+ * @param {Object} user
+ * @return {Object[]}
+ */
+function visibleUsers_(user) {
+  const all = readAll_(SHEETS.USERS);
+  if (isAdmin_(user)) return all;
+  // Supervisor e atendentes: apenas a própria equipe
+  return all.filter(function (u) { return String(u.equipe) === String(user.equipe); });
 }

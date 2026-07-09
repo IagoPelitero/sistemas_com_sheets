@@ -1,52 +1,117 @@
 /**
  * ============================================================
- * PortoBank Performance — Sales.gs
+ * PortoBank Performance — Users.gs
  * ------------------------------------------------------------
- * Registro e consulta de vendas de massificados.
- * Campos: Data, CPF, Produto (Massificado), Quantidade, OBS.
+ * CRUD de usuários.
+ *  - Edição completa via sistema (Nome, Email, Cargo, Equipe,
+ *    Status) — sem abrir o Sheets.
+ *  - Exclusão DEFINITIVA da linha (deleteRow), sem soft delete.
  * ============================================================
  */
 
 /**
- * Registra uma nova venda.
+ * Cria um usuário.
  * @param {Object} me Usuário autenticado.
- * @param {Object} data {data, cpf, produto, quantidade, obs}
+ * @param {Object} data {nome, email, cargo, equipe, status}
+ * @return {Object} usuário criado.
  */
-function salesCreate_(me, data) {
-  if (!data.data) throw new Error('Data é obrigatória.');
-  if (!isValidCpf_(data.cpf)) throw new Error('CPF inválido (11 dígitos).');
-  if (!data.produto) throw new Error('Produto é obrigatório.');
-  const qtd = parseInt(data.quantidade, 10);
-  if (!qtd || qtd < 1) throw new Error('Quantidade deve ser maior que zero.');
+function usersCreate_(me, data) {
+  const perms = getPermissions_(me);
+  if (!perms.canManageUsers) throw new Error('Sem permissão para cadastrar usuários.');
 
-  const sale = {
+  const email = String(data.email || '').toLowerCase().trim();
+  if (!email || email.indexOf('@') === -1) throw new Error('E-mail inválido.');
+  if (!data.nome) throw new Error('Nome é obrigatório.');
+  if (!PERMISSIONS[data.cargo]) throw new Error('Cargo inválido.');
+
+  // Supervisor só cadastra na própria equipe e nunca cria ADMIN/supervisores
+  if (!isAdmin_(me)) {
+    if (data.cargo === ROLES.ADMIN || SUPERVISOR_ROLES.indexOf(data.cargo) !== -1) {
+      throw new Error('Somente o ADMIN pode criar administradores ou supervisores.');
+    }
+    data.equipe = me.equipe;
+  }
+
+  const exists = readAll_(SHEETS.USERS).some(function (u) {
+    return String(u.email).toLowerCase().trim() === email;
+  });
+  if (exists) throw new Error('Já existe um usuário com este e-mail.');
+
+  const user = {
     id: uid_(),
-    data: toDateKey_(data.data),
-    cpf: String(data.cpf).replace(/\D/g, ''),
-    produto: String(data.produto).trim(),
-    quantidade: qtd,
-    obs: String(data.obs || '').trim(),
-    userId: me.id,
-    equipe: me.equipe,
-    criadoEm: nowIso_()
+    nome: String(data.nome).trim(),
+    email: email,
+    cargo: data.cargo,
+    equipe: String(data.equipe || '').trim(),
+    status: data.status || 'Ativo',
+    tema: 'portobank',
+    criadoEm: nowIso_(),
+    atualizadoEm: nowIso_()
   };
-  appendRow_(SHEETS.SALES, sale);
-  audit_(me.email, 'SALE_CREATE', sale.produto + ' x' + qtd);
-  return sale;
+  appendRow_(SHEETS.USERS, user);
+  audit_(me.email, 'USER_CREATE', email);
+  return user;
 }
 
 /**
- * Vendas do mês corrente filtradas por escopo.
+ * Edita um usuário (Nome, Email, Cargo, Equipe, Status).
  * @param {Object} me
- * @param {string} scope 'self' | 'team' | 'all'
- * @param {string=} monthKey 'yyyy-MM' (padrão: mês atual)
+ * @param {string} id
+ * @param {Object} patch
  */
-function salesQuery_(me, scope, monthKey) {
-  const mk = monthKey || toMonthKey_(new Date());
-  return readAll_(SHEETS.SALES).filter(function (s) {
-    if (toMonthKey_(s.data) !== mk) return false;
-    if (scope === 'self') return String(s.userId) === String(me.id);
-    if (scope === 'team') return String(s.equipe) === String(me.equipe);
-    return true; // all
+function usersUpdate_(me, id, patch) {
+  const perms = getPermissions_(me);
+  if (!perms.canManageUsers) throw new Error('Sem permissão para editar usuários.');
+
+  const target = readAll_(SHEETS.USERS).find(function (u) { return String(u.id) === String(id); });
+  if (!target) throw new Error('Usuário não encontrado.');
+  assertCanManage_(me, target);
+
+  const allowed = {};
+  ['nome', 'email', 'cargo', 'equipe', 'status'].forEach(function (f) {
+    if (patch[f] !== undefined && patch[f] !== '') allowed[f] = patch[f];
   });
+  if (allowed.email) allowed.email = String(allowed.email).toLowerCase().trim();
+  if (allowed.cargo && !PERMISSIONS[allowed.cargo]) throw new Error('Cargo inválido.');
+  if (allowed.cargo && !isAdmin_(me) &&
+      (allowed.cargo === ROLES.ADMIN || SUPERVISOR_ROLES.indexOf(allowed.cargo) !== -1)) {
+    throw new Error('Somente o ADMIN pode promover a administrador ou supervisor.');
+  }
+  if (!isAdmin_(me)) delete allowed.equipe; // supervisor não move gente de equipe
+
+  allowed.atualizadoEm = nowIso_();
+  if (!updateRowById_(SHEETS.USERS, id, allowed)) throw new Error('Falha ao atualizar usuário.');
+  audit_(me.email, 'USER_UPDATE', id);
+  return true;
+}
+
+/**
+ * EXCLUI DEFINITIVAMENTE um usuário — remove a linha da aba
+ * Users. Sem lixo de dados.
+ * @param {Object} me
+ * @param {string} id
+ */
+function usersDelete_(me, id) {
+  const perms = getPermissions_(me);
+  if (!perms.canManageUsers) throw new Error('Sem permissão para excluir usuários.');
+
+  const target = readAll_(SHEETS.USERS).find(function (u) { return String(u.id) === String(id); });
+  if (!target) throw new Error('Usuário não encontrado.');
+  if (String(target.id) === String(me.id)) throw new Error('Você não pode excluir a si mesmo.');
+  assertCanManage_(me, target);
+
+  if (!deleteRowById_(SHEETS.USERS, id)) throw new Error('Falha ao excluir usuário.');
+  audit_(me.email, 'USER_DELETE', target.email);
+  return true;
+}
+
+/**
+ * Salva a preferência de tema do usuário.
+ * @param {Object} me
+ * @param {string} tema
+ */
+function usersSetTheme_(me, tema) {
+  if (THEMES.indexOf(tema) === -1) throw new Error('Tema inválido.');
+  updateRowById_(SHEETS.USERS, me.id, { tema: tema, atualizadoEm: nowIso_() });
+  return true;
 }
