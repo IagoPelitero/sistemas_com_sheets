@@ -16,12 +16,12 @@ function goalForUser_(user, monthKey) {
   const goals = readAll_(SHEETS.GOALS);
 
   const own = goals.find(function (g) {
-    return g.tipo === 'user' && String(g.alvoId) === String(user.id) && String(g.mes) === mk;
+    return g.tipo === 'user' && String(g.alvoId) === String(user.id) && monthKeyOf_(g.mes) === mk;
   });
   if (own) return normalizeGoal_(own);
 
   const team = goals.find(function (g) {
-    return g.tipo === 'team' && String(g.alvoId) === String(user.equipe) && String(g.mes) === mk;
+    return g.tipo === 'team' && String(g.alvoId) === String(user.equipe) && monthKeyOf_(g.mes) === mk;
   });
   if (team) return normalizeGoal_(team);
 
@@ -58,7 +58,7 @@ function goalsGetFor_(me, q) {
       throw new Error('Você só pode consultar metas da sua equipe.');
     }
     const g = readAll_(SHEETS.GOALS).find(function (x) {
-      return x.tipo === 'team' && String(x.alvoId) === String(alvo) && String(x.mes) === mk;
+      return x.tipo === 'team' && String(x.alvoId) === String(alvo) && monthKeyOf_(x.mes) === mk;
     });
     if (g) return normalizeGoal_(g);
     return {
@@ -105,7 +105,7 @@ function goalsSet_(me, data) {
 
   const goals = readAll_(SHEETS.GOALS);
   const existing = goals.find(function (g) {
-    return g.tipo === data.tipo && String(g.alvoId) === String(data.alvoId) && String(g.mes) === mk;
+    return g.tipo === data.tipo && String(g.alvoId) === String(data.alvoId) && monthKeyOf_(g.mes) === mk;
   });
 
   const payload = {

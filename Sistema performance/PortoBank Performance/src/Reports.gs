@@ -74,10 +74,10 @@ function reportGenerate_(me, tipo, monthKey) {
     case 'Metas':
       rows = [['Tipo', 'Alvo', 'Meta Vendas (qtd)', 'Meta Retenção Cartão (%)', 'Meta Retenção Conta (%)', 'Mês']];
       readAll_(SHEETS.GOALS)
-        .filter(function (g) { return String(g.mes) === mk; })
+        .filter(function (g) { return monthKeyOf_(g.mes) === mk; })
         .filter(function (g) { return isAdmin_(me) || goalVisible_(me, g); })
         .forEach(function (g) {
-          rows.push([g.tipo, goalTargetName_(g, nomes), g.metaVendas, normalizeGoal_(g).metaRetencaoCartao, normalizeGoal_(g).metaRetencaoConta, g.mes]);
+          rows.push([g.tipo, goalTargetName_(g, nomes), g.metaVendas, normalizeGoal_(g).metaRetencaoCartao, normalizeGoal_(g).metaRetencaoConta, monthKeyOf_(g.mes)]);
         });
       break;
   }
