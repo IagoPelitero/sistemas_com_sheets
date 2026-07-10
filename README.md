@@ -26,9 +26,8 @@ O repositório contém mais de um sistema, em pastas separadas. Você pode usar 
 |---|---|
 | [sistema_vendas_sheets/](sistema_vendas_sheets) | Sistema focado em **registro de vendas**, comissões, metas e relatórios. |
 | [sistema_retencao_sheets/](sistema_retencao_sheets) | Sistema focado em **registro de retenção de clientes** (evitar cancelamentos), com dashboards e ranking por equipe. |
-| *(pasta adicional)* | Versão mais recente e completa, que junta **vendas + retenção + comissões + metas + relatórios** em um único sistema, com temas visuais e mais opções de configuração. |
 
-Cada pasta é independente e pode ser publicada separadamente como o seu próprio "site" (aplicativo web) dentro do Google.
+Cada pasta é independente e pode ser publicada separadamente como o seu próprio "site" (aplicativo web) dentro do Google. Cada uma contém apenas dois arquivos: o código do sistema (`Code.gs`) e a tela (`Index.html`).
 
 ## 3. Como o sistema funciona, de forma simples
 
@@ -79,4 +78,4 @@ Depois disso, o administrador pode cadastrar o restante da equipe direto pelo si
 
 ---
 
-Licença: MIT (uso livre, veja o arquivo de licença de cada pasta).
+Licença: MIT (uso livre).
