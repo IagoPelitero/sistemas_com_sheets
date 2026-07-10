@@ -3,6 +3,21 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.6.0] — 2026-07-10
+### Corrigido
+- **Definir Meta funcionava mas a meta "sumia"**: o Google Sheets converte o texto do mês ('2026-07') em DATA ao gravar, e a comparação por texto nunca mais encontrava a meta salva. O campo `mes` agora é normalizado na leitura (`monthKeyOf_`), corrigindo também retroativamente as metas já gravadas. ADMIN altera metas de todos (inclusive a própria); supervisor, apenas de membros da sua equipe — validado no servidor.
+- **Comissão do Cartão DIGITAL sem pontos**: removida a conversão por pontos (`pontoArgumentacao`/`pontoIncentivo`/`valorPonto`); agora cada retenção por Argumentação vale diretamente R$1,50 e por Incentivo R$0,50 (`comissao.cartaoDigital.valorArgumentacao`/`valorIncentivo`). Migração automática limpa as chaves antigas e insere as novas em instalações existentes; dashboards, ranking e relatórios recalculam sozinhos (nada derivado é gravado).
+
+### Adicionado
+- **ID crescente**: novos ids têm 24 dígitos hex — timestamp (12) + aleatório (12) — ordenáveis cronologicamente por texto; 2^48 combinações por milissegundo (colisão desprezível) e ordenação válida até o ano ~10.889. IDs antigos continuam funcionando.
+- **Motor de comissão do Cartão por usuário**: campo `motor` no cadastro (`auto`/`fone`/`digital`), definível SOMENTE pelo ADMIN (modal 🎯 e formulário de usuário). Muda exclusivamente a regra do Cartão de Crédito; vendas, massificados, Conta Digital e Cashback permanecem intactos.
+- **Importação dos sistemas antigos** (Import.gs, ADMIN): vendas (`vendas_ativas`) e retenção (`Dados`) por link da planilha; validação linha a linha, tradução automática de vocabulário/produtos, idempotência por etiqueta `[import:arquivo:linha]` (reimportar não duplica), gravação em lote (`appendRows_`) e resumo com motivos de linhas puladas.
+- **Proteção anti-duplo-clique em camadas**: botões travados com indicador em todos os formulários; idempotência por `reqId` em toda escrita (verificação atômica sob LockService, validade 10 min); bloqueio de venda/retenção idêntica em janela de 10s (cobre duas abas/dispositivos).
+
+### Alterado
+- `goals.get` aceita alvo (usuário/equipe) e o modal 🎯 mostra a regra de Cartão vigente para o ADMIN.
+- README reorganizado: novas seções de Metas, Importação, IDs/anti-duplicidade.
+
 ## [1.5.0] — 2026-07-10
 ### Corrigido
 - Tela Cadastro: editar usuário voltou a funcionar (o botão passava o objeto inteiro em vez do id — modal abria vazio e salvar dava "Usuário não encontrado"). Botões de editar usuário/equipe/produto agora passam somente o id, o que também elimina a quebra do HTML com nomes contendo aspas/apóstrofos.

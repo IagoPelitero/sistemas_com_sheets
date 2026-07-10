@@ -23,7 +23,7 @@ Cliente (SPA)                       Servidor (Apps Script)
 └────────────────────┘  JSON      │  ├─ Retention.gs Goals.gs    │
                                   │  ├─ Commission.gs Dashboard  │
                                   │  ├─ Ranking.gs Reports.gs    │
-                                  │  ├─ Settings.gs              │
+                                  │  ├─ Settings.gs Import.gs    │
                                   │  └─ Cache.gs + Utils.gs (DB) │
                                   └───────────┬──────────────────┘
                                               │ readAll_/append/update/delete
@@ -40,7 +40,7 @@ Princípios:
 
 | Aba | Colunas |
 |---|---|
-| `Users` | id, nome, email, cargo, equipe, status, tema, criadoEm, atualizadoEm |
+| `Users` | id, nome, email, cargo, equipe, status, tema, motor, criadoEm, atualizadoEm |
 | `Sales` | id, data, cpf, produto, quantidade, obs, userId, equipe, criadoEm |
 | `Retention` | id, data, cpf, produto, resultado, obs, userId, equipe, criadoEm |
 | `Goals` | id, tipo (user/team), alvoId, metaVendas, metaComissao, metaRetencao, mes, atualizadoEm |
@@ -108,9 +108,14 @@ Indicadores de valor fixo: **CPCP R$30** (pago só com proposta formalizada apó
 A comissão total soma automaticamente **Cartão + Conta Digital + Cashback + Vendas + Retenção de Massificados** — no card do dashboard e em todos os relatórios. O que muda por perfil é apenas a **regra do Cartão**:
 
 ### Cartão de Crédito — DIGITAL (PDF 6.3.2)
-- Retenção por **Argumentação** = 1,5 ponto = **R$1,50**/retida.
-- Retenção por **Incentivo** = 0,5 ponto = **R$0,50**/retida.
+- Valores financeiros **DIRETOS**, sem conversão por pontos:
+  - Retenção por **Argumentação** = **R$1,50**/retida (`comissao.cartaoDigital.valorArgumentacao`).
+  - Retenção por **Incentivo** = **R$0,50**/retida (`comissao.cartaoDigital.valorIncentivo`).
 - **TETO: a comissão do Cartão nunca ultrapassa R$530,00** (`comissao.retencao.teto`). O corte é automático e vale SÓ para o Cartão — Conta, Cashback, Vendas e Massificados não são limitados.
+- Instalações antigas migram sozinhas: as chaves de pontos (`pontoArgumentacao`/`pontoIncentivo`/`valorPonto`) são removidas e substituídas pelas de valor direto na primeira execução após a atualização.
+
+### Qual regra de Cartão cada usuário usa (motor)
+Por padrão a regra do Cartão é **automática pelo cargo** (perfis "digital" usam a regra Digital; os demais, a Fone). O **ADMIN** pode fixar a regra por usuário no campo **motor** do cadastro (`auto`/`fone`/`digital`) — disponível no modal 🎯 de metas e no formulário de usuário. Essa escolha afeta **somente o cálculo do Cartão de Crédito**: vendas, massificados, Conta Digital e Cashback não mudam. Supervisores não alteram o motor.
 
 ### Cartão de Crédito — FONE (especificação do sistema)
 73% → R$150 · 74% → R$180 · 75% → R$200.
@@ -171,6 +176,8 @@ clasp push
 
 - **Regras de comissão:** Configurações (ADMIN) → chaves `comissao.*`. Faixas e tabelas são JSON (ex.: `[{"pct":73,"valor":150},...]`); a tabela de vendas coletivas fica em `comissao.vendas.tabela`.
 - **Metas:** Gestão da Equipe → 🎯 (individual ou da equipe), ou metas padrão em `meta.padrao.*`.
+- **Regra do Cartão de um usuário (fone/digital):** modal 🎯 ou formulário do usuário — SOMENTE ADMIN (campo `motor`).
+- **Histórico dos sistemas antigos:** Configurações → Importar sistemas antigos (ADMIN).
 - **Produtos:** Configurações → Produtos (nome, comissão unitária, ativo).
 - **Novos cargos:** adicione em `ROLES` e `PERMISSIONS` (`Config.gs`) — nada mais é necessário; menu e regras derivam de `PERMISSIONS`.
 - **Equipes:** aba Cadastro (ADMIN).
@@ -189,7 +196,36 @@ A aba `Audit` cresce continuamente; a rotação mantém a planilha principal lev
 - **Manual:** ADMIN → Configurações → card **Auditoria** → "Arquivar agora". O painel mostra quantos registros existem e o link do último arquivo gerado.
 - A gravação no arquivo acontece **antes** da limpeza da principal — sem risco de perda.
 
-## 12. Sincronização e recálculo automático
+## 12. Metas — como funcionam
+
+- Meta **individual** (por usuário) tem prioridade; sem ela vale a meta **da equipe**; sem nenhuma, valem os padrões (`meta.padrao.*`).
+- O modal 🎯 (Gestão da Equipe) abre com os **valores vigentes** do alvo e grava por mês (`yyyy-MM`).
+- **ADMIN** altera a meta de qualquer usuário (inclusive a própria) e também a regra do Cartão (motor). **Supervisor** altera apenas metas de membros da própria equipe — nunca de outra equipe, nunca configurações globais, nunca o motor.
+- Robustez: o Google Sheets converte o texto `2026-07` em DATA ao gravar; o sistema normaliza o campo `mes` na leitura (`monthKeyOf_`), então metas antigas e novas são sempre encontradas, sem migração.
+
+## 13. Importação dos sistemas antigos
+
+ADMIN → Configurações → card **"Importar sistemas antigos"**: cole o link da planilha antiga e escolha a origem — **Vendas** (aba `vendas_ativas`: Data, Produto, Protocolo, Email, Equipe, Quantidade) ou **Retenção** (aba `Dados`: Data, Email, Nome, Supervisor, Tipo, SubProduto, Resultado).
+
+- **Validação antes de gravar**: data, e-mail (precisa existir na aba `Users`) e produto/resultado são conferidos; linhas inválidas são puladas e contadas por motivo no resumo final.
+- **Idempotente**: cada registro importado recebe a etiqueta `[import:<arquivo>:<linha>]` no campo obs — reimportar a mesma planilha reconhece e pula o que já entrou (zero duplicatas).
+- **Vocabulário traduzido automaticamente** (retenção): `Troca de Pontos` → `Cashback`; massificados antigos → produtos atuais (`SPPR / Bolsa Protegida` → Perda e Roubo, `Seguro RE` → RE, `Martelinho de Ouro` → Martelinho etc.); resultados `Retido`/`Troca`/`Argumentação` → nomenclatura atual. Massificados sem correspondente (ex.: Adicional, Quitação fatura) são pulados e informados.
+- **Gravação em lote**: uma única trava e uma única escrita — milhares de linhas sem pesar no Sheets.
+- **Recálculo automático**: dashboards, ranking, metas e comissões passam a considerar o histórico importado imediatamente (nada derivado é gravado).
+- **Reutilizável**: novas origens são só uma entrada a mais no mapa `LEGACY_SOURCES_` (Import.gs).
+
+## 14. IDs, concorrência e proteção contra duplicidade
+
+### ID crescente
+Todo registro recebe um id hexadecimal de 24 caracteres: **12 dígitos de timestamp** (ms, com zeros à esquerda — ordena cronologicamente por simples comparação de texto até o ano ~10.889) + **12 dígitos aleatórios** (2^48 ≈ 281 trilhões de combinações por milissegundo — colisão desprezível). Na prática o limite não é o id, e sim a capacidade da planilha (10 milhões de células). IDs antigos continuam válidos: a unicidade é por igualdade e nenhuma ordenação depende do id.
+
+### Anti-duplo-clique (nenhum registro entra duas vezes)
+1. **Botões travados** com indicador ("Salvando…") do clique até a resposta — em Nova Venda, Nova Retenção, usuários, metas, produtos, equipes, exclusões e importação.
+2. **Idempotência por `reqId`**: toda escrita envia um identificador único; o servidor rejeita repetições (retry de rede, latência) com verificação atômica sob `LockService`.
+3. **Bloqueio de conteúdo idêntico**: venda/retenção igual (mesmo usuário e campos) nos últimos 10 segundos é recusada — cobre o duplo envio por duas abas/dispositivos.
+4. **`LockService` em toda escrita** (já existente) serializa a gravação física.
+
+## 15. Sincronização e recálculo automático
 
 - **Nada derivado é gravado na planilha**: comissões, percentuais, rankings e indicadores são recalculados a cada leitura a partir dos registros brutos (Sales/Retention/Goals/Settings). Por isso, **qualquer mudança de regra em Configurações se aplica retroativamente e na hora** a todos os dados existentes — sem migração.
 - **Percentuais 100% dinâmicos**: os cards de Cartão e Conta calculam retidos ÷ atendidos dos registros do Sheets; cada novo registro invalida o cache da aba e atualiza os indicadores imediatamente.
@@ -197,14 +233,14 @@ A aba `Audit` cresce continuamente; a rotação mantém a planilha principal lev
 - **Cabeçalhos reconciliados**: o sistema lê/escreve pelas colunas REAIS da planilha (`headersOf_`); colunas novas de versões futuras são acrescentadas ao final sem tocar nas existentes — nada é sobrescrito.
 - **Datas sem deslocamento**: `yyyy-MM-dd` do formulário é gravado exatamente como informado (nunca passa por conversão UTC que retrocederia um dia); exibição em `dd/MM/aaaa`.
 
-## 13. Cache — como funciona e como usar
+## 16. Cache — como funciona e como usar
 
 - `readAll_(aba)` → tenta o cache; se vazio, lê a planilha **uma vez** e grava em chunks (TTL 5 min).
 - Toda escrita (`appendRow_`, `updateRowById_`, `deleteRowById_`) troca o *version token* da aba → a próxima leitura recarrega **somente aquela aba**.
 - O cliente mantém cache por página+mês e o limpa após qualquer escrita → **atualização imediata** após cadastrar venda/retenção/usuário/meta.
 - Para forçar limpeza geral: execute `cacheFlushAll_()` no editor.
 
-## 14. Boas práticas adotadas
+## 17. Boas práticas adotadas
 
 - Funções internas com sufixo `_` (não invocáveis pelo cliente); único endpoint público `api()`.
 - `LockService` em toda escrita (concorrência segura).
@@ -213,7 +249,7 @@ A aba `Audit` cresce continuamente; a rotação mantém a planilha principal lev
 - Auditoria de todas as operações relevantes (aba `Audit`).
 - Zero duplicação: camada de dados única em `Utils.gs`.
 
-## 15. Troubleshooting
+## 18. Troubleshooting
 
 | Sintoma | Causa provável | Solução |
 |---|---|---|
@@ -224,7 +260,7 @@ A aba `Audit` cresce continuamente; a rotação mantém a planilha principal lev
 | Gráficos não aparecem | CDN do Chart.js bloqueada na rede | Liberar `cdnjs.cloudflare.com` |
 | Faixa de vendas desatualizada | Atingimento coletivo do mês não informado | Atualizar `comissao.vendas.atingimentoColetivo` em Configurações |
 
-## 16. Roadmap
+## 19. Roadmap
 
 - [x] Valores oficiais do PDF de Remuneração Variável importados (v1.1.0).
 - [ ] Exportação de relatórios em PDF/XLSX além de CSV.
