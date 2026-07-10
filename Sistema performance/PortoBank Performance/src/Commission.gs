@@ -13,9 +13,9 @@
  *   (vigência 01/01/2026):
  *     6.3.1 Vendas coletivas por faixa de atingimento
  *           (até 60 | 60–79,99 | 80–100 | >100) — sem teto
- *     6.3.2 Cartão digital: Argumentação R$1,50 e Incentivo R$0,50
- *           por retido (pontos 1,5/0,5 × R$1,00) + Cashback por
- *           faixa (36%→50 | 39%→70 | 42%→100 | 45%→130)
+ *     6.3.2 Cartão digital: valores DIRETOS por retenção —
+ *           Argumentação R$1,50 e Incentivo R$0,50 (sem pontos)
+ *           + Cashback por faixa (36%→50 | 39%→70 | 42%→100 | 45%→130)
  *     6.4   Teto do bloco de retenção: R$530
  *     6.5   Retenção de massificados por faixa de conversão,
  *           separada em Argumentação e Incentivo, por produto
@@ -139,24 +139,28 @@ function commissionCartaoFone_(cartao) {
 }
 
 /**
- * Pontos e valor do Cartão de Crédito DIGITAL (PDF 6.3.2).
- * Argumentação = 1,5 pt (R$1,50) | Incentivo = 0,5 pt (R$0,50).
- * Somente Cartão possui regra de pontos.
+ * Comissão do Cartão de Crédito DIGITAL (PDF 6.3.2) — valores
+ * financeiros DIRETOS, sem conversão por pontos:
+ *   cada retenção por Argumentação → R$1,50
+ *   cada retenção por Incentivo    → R$0,50
  * @param {Object[]} rows Retenções do usuário no mês.
  */
 function commissionCartaoDigital_(rows) {
-  const ptInc = settingNum_('comissao.cartaoDigital.pontoIncentivo');   // 0.5
-  const ptArg = settingNum_('comissao.cartaoDigital.pontoArgumentacao'); // 1.5
-  const valorPonto = settingNum_('comissao.cartaoDigital.valorPonto');   // R$1,00
+  const vArg = settingNum_('comissao.cartaoDigital.valorArgumentacao'); // R$1,50
+  const vInc = settingNum_('comissao.cartaoDigital.valorIncentivo');    // R$0,50
 
-  let pontos = 0;
+  let arg = 0, inc = 0;
   rows.forEach(function (r) {
     if (r.produto !== 'Cartão de Crédito') return;
     // 'Retido por Incentivo' (nomenclatura atual) ou 'Retido' (registros legados)
-    if (r.resultado === 'Retido por Incentivo' || r.resultado === 'Retido') pontos += ptInc;
-    if (r.resultado === 'Retido por Argumentação') pontos += ptArg;
+    if (r.resultado === 'Retido por Incentivo' || r.resultado === 'Retido') inc++;
+    if (r.resultado === 'Retido por Argumentação') arg++;
   });
-  return { pontos: pontos, valor: round2_(pontos * valorPonto) };
+  return {
+    argumentacoes: arg, incentivos: inc,
+    valorArgumentacao: vArg, valorIncentivo: vInc,
+    valor: round2_(arg * vArg + inc * vInc)
+  };
 }
 
 /**
@@ -247,8 +251,8 @@ function commissionMassificados_(rows) {
 
 /**
  * Comissão total de um usuário no mês (vendas + retenção).
- * Teto do PDF 6.4 (R$530) aplicado ao bloco 6.3.2:
- * pontos do cartão (argumentação + incentivo) + prêmio de cashback.
+ * Teto do PDF 6.4 (R$530) aplicado somente ao Cartão de Crédito
+ * do motor DIGITAL (argumentação + incentivo).
  * @param {Object} user
  * @param {string=} monthKey
  * @return {Object} composição completa da comissão
@@ -265,7 +269,14 @@ function commissionForUser_(user, monthKey) {
   const totalQtd = sales.reduce(function (a, x) { return a + (parseInt(x.quantidade, 10) || 1); }, 0);
   const atingimento = pct_(totalQtd, goal.metaVendas);
 
-  const isDigital = user.cargo === ROLES.AT_RET_DIGITAL || user.cargo === ROLES.SUP_RET_DIGITAL;
+  // MOTOR do Cartão de Crédito: o ADMIN pode fixar 'fone' ou
+  // 'digital' no cadastro do usuário (campo motor); vazio/auto =
+  // derivado do cargo. Afeta SOMENTE a regra do Cartão — vendas,
+  // massificados, Conta Digital e Cashback não mudam.
+  const motor = String(user.motor || '').toLowerCase().trim();
+  const isDigital = motor === 'digital' ? true
+    : motor === 'fone' ? false
+    : (user.cargo === ROLES.AT_RET_DIGITAL || user.cargo === ROLES.SUP_RET_DIGITAL);
   const digital = commissionCartaoDigital_(rets);
   const mass = commissionMassificados_(rets);
   const vendas = commissionVendas_(sales, atingimento);
@@ -274,21 +285,22 @@ function commissionForUser_(user, monthKey) {
   // modalidades: Cartão + Conta Digital + Cashback + Vendas +
   // Retenção de Massificados. O que muda por perfil é apenas a
   // regra do CARTÃO:
-  //  - DIGITAL: pontos por retenção (arg 1,5 = R$1,50 · inc 0,5 =
-  //    R$0,50), com teto de R$530 SÓ no cartão;
+  //  - DIGITAL: R$1,50 por retenção via argumentação e R$0,50 por
+  //    incentivo (valores diretos), com teto de R$530 SÓ no cartão;
   //  - FONE: faixas 73/74/75% + bônus.
   // Conta Digital (PDF 6.6 "Fone/Digital") e Cashback (PDF 6.3.2)
   // pagam por faixa para ambos os perfis, sem teto.
   const cartao = isDigital
     ? { base: 0, bonusArg: 0, bonusPremium: 0, total: digital.valor,
-        pontos: digital.pontos, detalhes: ['Pontuação digital: ' + digital.pontos + ' pts'] }
+        detalhes: ['Cartão digital: ' + digital.argumentacoes + ' arg × R$' + digital.valorArgumentacao.toFixed(2) +
+          ' + ' + digital.incentivos + ' inc × R$' + digital.valorIncentivo.toFixed(2)] }
     : commissionCartaoFone_(stats.cartao);
   const conta = commissionContaDigital_(stats.conta);
   const cashback = commissionCashback_(stats.cashback);
 
   // Teto de R$530: aplica-se SOMENTE à retenção de CARTÃO DE
-  // CRÉDITO do perfil DIGITAL (pontos de argumentação +
-  // incentivo). Não alcança os demais produtos nem o fone.
+  // CRÉDITO do motor DIGITAL (argumentação + incentivo).
+  // Não alcança os demais produtos nem o fone.
   const teto = settingNum_('comissao.retencao.teto');
   const cartaoFinal = (isDigital && teto > 0)
     ? Math.min(cartao.total, teto)

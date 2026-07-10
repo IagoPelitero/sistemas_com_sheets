@@ -101,19 +101,26 @@ function auditRotateNow_() {
  * ScriptProperties) e é verificado de forma barata via
  * CacheService a cada sessão.
  */
-const MIGRATION_FLAG_ = 'migracao.retidoIncentivo.v1';
+/** Passos de migração — cada um roda UMA única vez, em ordem. */
+const MIGRATIONS_ = [
+  { flag: 'migracao.retidoIncentivo.v1', run: function () { migrateRetidoIncentivo_(); } },
+  { flag: 'migracao.digitalDireto.v1', run: function () { migrateDigitalDireto_(); } }
+];
+const MIGRATION_CACHE_FLAG_ = 'migracao.verificada.v2';
 
-/** Verificação barata (cache) + execução única da migração. */
+/** Verificação barata (cache) + execução única das migrações. */
 function migrationEnsure_() {
   try {
     const cache = CacheService.getScriptCache();
-    if (cache.get(MIGRATION_FLAG_)) return;                 // já verificado nesta janela
+    if (cache.get(MIGRATION_CACHE_FLAG_)) return;           // já verificado nesta janela
     const props = PropertiesService.getScriptProperties();
-    if (!props.getProperty(MIGRATION_FLAG_)) {
-      migrateRetidoIncentivo_();
-      props.setProperty(MIGRATION_FLAG_, nowIso_());
-    }
-    cache.put(MIGRATION_FLAG_, '1', 21600); // não reverificar por 6h
+    MIGRATIONS_.forEach(function (m) {
+      if (!props.getProperty(m.flag)) {
+        m.run();
+        props.setProperty(m.flag, nowIso_());
+      }
+    });
+    cache.put(MIGRATION_CACHE_FLAG_, '1', 21600); // não reverificar por 6h
   } catch (e) { /* migração nunca derruba a operação */ }
 }
 
@@ -147,6 +154,48 @@ function migrateRetidoIncentivo_() {
       audit_('sistema', 'MIGRACAO', mudou + " registro(s) de Cartão: 'Retido' → 'Retido por Incentivo'");
     }
   });
+}
+
+/**
+ * Migra a comissão do Cartão DIGITAL de "pontos" para valores
+ * financeiros DIRETOS (R$1,50/argumentação, R$0,50/incentivo):
+ * remove as chaves antigas de pontos da aba Settings e insere as
+ * novas chaves de valor direto, preservando tudo o mais.
+ */
+function migrateDigitalDireto_() {
+  const oldKeys = [
+    'comissao.cartaoDigital.pontoIncentivo',
+    'comissao.cartaoDigital.pontoArgumentacao',
+    'comissao.cartaoDigital.valorPonto'
+  ];
+  let removidas = 0;
+  withLock_(function () {
+    const sheet = ensureSheet_(SHEETS.SETTINGS);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+    const keys = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (let i = keys.length - 1; i >= 0; i--) { // de baixo para cima (índices estáveis)
+      if (oldKeys.indexOf(String(keys[i][0])) !== -1) {
+        sheet.deleteRow(i + 2);
+        removidas++;
+      }
+    }
+  });
+  cacheInvalidate_(SHEETS.SETTINGS);
+
+  // Insere as novas chaves (se ausentes) para aparecerem em Configurações
+  ['comissao.cartaoDigital.valorArgumentacao', 'comissao.cartaoDigital.valorIncentivo'].forEach(function (k) {
+    const exists = readAll_(SHEETS.SETTINGS).some(function (r) { return String(r.chave) === k; });
+    if (!exists) {
+      appendRow_(SHEETS.SETTINGS, {
+        chave: k, valor: DEFAULT_SETTINGS[k],
+        descricao: settingDescription_(k), atualizadoEm: nowIso_()
+      });
+    }
+  });
+  if (removidas) {
+    audit_('sistema', 'MIGRACAO', 'Cartão digital: pontos → valores diretos (' + removidas + ' chave(s) antiga(s) removida(s))');
+  }
 }
 
 /**
