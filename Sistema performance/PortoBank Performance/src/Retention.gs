@@ -40,6 +40,8 @@ function retentionCreate_(me, data) {
     equipe: me.equipe,
     criadoEm: nowIso_()
   };
+  // Anti-duplicidade: retenção idêntica nos últimos 10s é bloqueada
+  assertNoRecentDuplicate_(SHEETS.RETENTION, ret, ['data', 'cpf', 'produto', 'resultado'], 10);
   appendRow_(SHEETS.RETENTION, ret);
   audit_(me.email, 'RETENTION_CREATE', ret.produto + ' → ' + ret.resultado);
   return ret;

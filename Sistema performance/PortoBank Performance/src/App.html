@@ -38,8 +38,18 @@ const App = (function () {
   const BRL = function (v) { return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); };
 
   // ------------------ API ------------------
+  // Ações que ESCREVEM no Sheets: recebem um reqId único por envio.
+  // O servidor rejeita reqId repetido — duplo clique, Enter duplo ou
+  // retry de rede nunca gravam duas vezes.
+  const WRITE_ACTIONS_RE = /\.(create|delete|update|save|set|theme|rotate|legacy)$/;
+  function newReqId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+  }
+
   /** Chama o servidor. Devolve Promise com data ou lança erro. */
   function api(action, payload) {
+    payload = payload || {};
+    if (WRITE_ACTIONS_RE.test(action) && !payload.reqId) payload.reqId = newReqId();
     return new Promise(function (resolve, reject) {
       google.script.run
         .withSuccessHandler(function (json) {
@@ -47,7 +57,22 @@ const App = (function () {
           res.ok ? resolve(res.data) : reject(new Error(res.error));
         })
         .withFailureHandler(function (e) { reject(e); })
-        .api(action, payload || {});
+        .api(action, payload);
+    });
+  }
+
+  /**
+   * Trava anti-duplo-clique de um botão enquanto a Promise roda:
+   * desabilita, mostra indicador e restaura ao final.
+   */
+  function lockWhile(btn, promise, label) {
+    if (btn) {
+      btn.disabled = true;
+      btn.dataset.txt = btn.textContent;
+      btn.textContent = label || 'Salvando…';
+    }
+    return promise.finally(function () {
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.txt || btn.textContent; }
     });
   }
 
@@ -586,6 +611,19 @@ const App = (function () {
               '<button class="btn small danger" onclick="App.productDelete(\'' + p.id + '\')">🗑</button></td></tr>';
           })) + '</div>';
 
+        // Importação dos sistemas antigos (vendas e retenção)
+        html += '<div class="card" style="margin-top:16px"><h3>Importar sistemas antigos</h3>' +
+          '<p class="muted">Traga o histórico dos sistemas antigos de Vendas (aba <span class="mono">vendas_ativas</span>) e de Retenção (aba <span class="mono">Dados</span>). ' +
+          'Cada linha é validada antes de entrar; linhas já importadas são reconhecidas e puladas — pode importar de novo sem duplicar. ' +
+          'Dashboards, ranking e comissões recalculam sozinhos.</p>' +
+          '<form id="fImport"><div class="form-grid" style="margin-top:10px">' +
+          '<div><label>Sistema de origem *</label><select name="tipo">' +
+          '<option value="vendas">Vendas (antigo)</option>' +
+          '<option value="retencao">Retenção (antigo)</option></select></div>' +
+          '<div class="full"><label>Link da planilha antiga *</label><input name="url" required placeholder="https://docs.google.com/spreadsheets/d/..."></div>' +
+          '</div><div class="form-actions"><button class="btn" type="submit">Importar agora</button></div></form>' +
+          '<p class="muted" style="margin-top:8px">Requisito: os e-mails dos atendentes precisam estar cadastrados aqui — registros de e-mails desconhecidos são pulados e informados no resumo.</p></div>';
+
         // Auditoria: arquivamento em nova planilha a cada 30 dias
         html += '<div class="card" style="margin-top:16px">' +
           '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px">' +
@@ -597,6 +635,25 @@ const App = (function () {
           '<span class="mono">auditRotationInstall()</span> no editor do Apps Script.</p></div>';
 
         el.innerHTML = html;
+
+        // Importação dos sistemas antigos (com trava e resumo)
+        document.getElementById('fImport').addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          const btn = ev.target.querySelector('button[type=submit]');
+          const payload = {}; new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
+          lockWhile(btn, api('import.legacy', payload).then(function (r) {
+            invalidate();
+            const motivos = Object.keys(r.motivos || {}).map(function (m) {
+              return '<li>' + esc(m) + ': <strong>' + r.motivos[m] + '</strong></li>';
+            }).join('');
+            openModal('Importação concluída',
+              '<p><strong>' + r.importados + '</strong> registro(s) importado(s) de ' + r.total + ' linha(s) lidas.</p>' +
+              (r.jaImportados ? '<p class="muted" style="margin-top:6px">' + r.jaImportados + ' já estava(m) no sistema — pulados sem duplicar.</p>' : '') +
+              (motivos ? '<p style="margin-top:8px">Pulados na validação:</p><ul class="muted" style="margin:6px 0 0 18px">' + motivos + '</ul>' : '') +
+              '<div class="form-actions"><button class="btn" onclick="App.closeModal()">OK</button></div>');
+          }).catch(function (e) { toast(e.message, true); }), 'Importando…');
+        });
+
         api('audit.status', {}).then(function (a) {
           const u = a.ultimaRotacao;
           document.getElementById('auditInfo').innerHTML =
@@ -624,20 +681,18 @@ const App = (function () {
       if (inflight) return;
       inflight = true;
       const btn = form.querySelector('button[type=submit]');
-      btn.disabled = true;
       const payload = {};
       new FormData(form).forEach(function (v, k) { payload[k] = v; });
       if (payload.cpf) payload.cpf = payload.cpf.replace(/\D/g, '');
-      api(action, payload).then(function () {
+      lockWhile(btn, api(action, payload).then(function () {
         toast(successMsg);
         invalidate();          // atualização imediata: limpa cache de cliente
         form.reset();
         const dt = form.querySelector('input[type=date]');
         if (dt) dt.value = todayLocal();
-        inflight = false; btn.disabled = false;
         // Atualiza a lista de últimos lançamentos, se a página tiver uma
         if (document.getElementById('recentBox')) loadRecent(action.split('.')[0]);
-      }).catch(function (e) { toast(e.message, true); inflight = false; btn.disabled = false; });
+      }).catch(function (e) { toast(e.message, true); })).finally(function () { inflight = false; });
     });
   }
 
@@ -682,10 +737,10 @@ const App = (function () {
       '<p>Excluir este lançamento definitivamente? Indicadores e comissões são recalculados automaticamente.</p>' +
       '<div class="form-actions"><button class="btn ghost" onclick="App.closeModal()">Cancelar</button>' +
       '<button class="btn danger" id="btnDelEntry">Excluir</button></div>');
-    document.getElementById('btnDelEntry').addEventListener('click', function () {
-      api(kind + '.delete', { id: id }).then(function () {
+    document.getElementById('btnDelEntry').addEventListener('click', function (ev) {
+      lockWhile(ev.target, api(kind + '.delete', { id: id }).then(function () {
         toast('Lançamento excluído!'); closeModal(); invalidate(); loadRecent(kind);
-      }).catch(function (e) { toast(e.message, true); closeModal(); });
+      }).catch(function (e) { toast(e.message, true); closeModal(); }));
     });
   }
 
@@ -713,17 +768,27 @@ const App = (function () {
         '<div><label>Status</label><select name="status"><option ' + (u.status === 'Ativo' ? 'selected' : '') + '>Ativo</option>' +
         '<option ' + (u.status === 'Inativo' ? 'selected' : '') + '>Inativo</option></select></div>' +
         (isAdmin ? '<div class="full"><label>Equipe</label><input name="equipe" value="' + esc(u.equipe || '') + '"></div>' : '') +
+        (isAdmin
+          ? '<div class="full"><label>Regra de comissão da retenção de Cartão de Crédito</label>' +
+            '<select name="motor">' +
+            '<option value=""' + (!u.motor ? ' selected' : '') + '>Automática (pelo cargo)</option>' +
+            '<option value="fone"' + (u.motor === 'fone' ? ' selected' : '') + '>Retenção Fone</option>' +
+            '<option value="digital"' + (u.motor === 'digital' ? ' selected' : '') + '>Retenção Digital</option>' +
+            '</select><small class="muted">Afeta SOMENTE o cálculo do Cartão de Crédito.</small></div>'
+          : '') +
         '</div><div class="form-actions"><button class="btn ghost" type="button" onclick="App.closeModal()">Cancelar</button>' +
         '<button class="btn" type="submit">Salvar</button></div></form>');
 
       document.getElementById('fUser').addEventListener('submit', function (ev) {
         ev.preventDefault();
+        const btn = ev.target.querySelector('button[type=submit]');
         const payload = {}; new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
         if (id) payload.id = id;
-        api(id ? 'users.update' : 'users.create', payload).then(function () {
+        if (payload.motor === '') payload.motor = 'auto'; // '' some do FormData no update
+        lockWhile(btn, api(id ? 'users.update' : 'users.create', payload).then(function () {
           toast(id ? 'Alterações salvas!' : 'Usuário cadastrado com sucesso!');
           closeModal(); invalidate(); go(state.page);
-        }).catch(function (e) { toast(e.message, true); });
+        }).catch(function (e) { toast(e.message, true); }));
       });
     };
 
@@ -742,10 +807,10 @@ const App = (function () {
         '<p>Excluir <strong>' + esc(u.nome || 'usuário') + '</strong> definitivamente? A linha será removida da planilha.</p>' +
         '<div class="form-actions"><button class="btn ghost" onclick="App.closeModal()">Cancelar</button>' +
         '<button class="btn danger" id="btnDelU">Excluir definitivamente</button></div>');
-      document.getElementById('btnDelU').addEventListener('click', function () {
-        api('users.delete', { id: id }).then(function () {
+      document.getElementById('btnDelU').addEventListener('click', function (ev) {
+        lockWhile(ev.target, api('users.delete', { id: id }).then(function () {
           toast('Usuário excluído!'); closeModal(); invalidate(); go(state.page);
-        }).catch(function (e) { toast(e.message, true); });
+        }).catch(function (e) { toast(e.message, true); }));
       });
     });
   }
@@ -769,36 +834,57 @@ const App = (function () {
   }
 
   /** Modal de meta (individual ou da equipe) — abre com os
-   *  valores VIGENTES, para o gestor não salvar padrões sem querer. */
+   *  valores VIGENTES, para o gestor não salvar padrões sem querer.
+   *  ADMIN também define aqui a REGRA do Cartão de Crédito
+   *  (Fone/Digital) do usuário — só o Cartão; nada mais muda. */
   function goalForm(userId) {
     const isTeam = !userId;
-    const nomePromise = isTeam
-      ? Promise.resolve(state.session.user.equipe)
+    const isAdminMe = state.session.user.cargo === 'ADMIN';
+    const alvoPromise = isTeam
+      ? Promise.resolve(null)
       : cached('users.list').then(function (users) {
-          const u = users.find(function (x) { return String(x.id) === String(userId); });
-          return u ? u.nome : 'membro';
+          return users.find(function (x) { return String(x.id) === String(userId); }) || null;
         });
 
     openModal('Definir meta', '<div class="empty">Carregando meta vigente…</div>');
     const q = isTeam ? { tipo: 'team', mes: state.month } : { id: userId, mes: state.month };
-    Promise.all([api('goals.get', q), nomePromise]).then(function (res) {
-      const g = res[0];
-      document.getElementById('modalTitle').textContent = 'Definir meta — ' + res[1];
+    Promise.all([api('goals.get', q), alvoPromise]).then(function (res) {
+      const g = res[0], alvo = res[1];
+      const nome = isTeam ? state.session.user.equipe : (alvo ? alvo.nome : 'membro');
+      const showMotor = isAdminMe && !isTeam && !!alvo; // supervisor nunca vê/altera a regra
+      const motorAtual = showMotor ? String(alvo.motor || '') : '';
+
+      document.getElementById('modalTitle').textContent = 'Definir meta — ' + nome;
       document.getElementById('modalBody').innerHTML =
         '<form id="fGoal"><div class="form-grid">' +
         '<div><label>Meta de vendas (quantidade)</label><input type="number" name="metaVendas" min="0" step="1" value="' + (g.metaVendas || 0) + '"></div>' +
         '<div><label>Meta retenção Cartão (%)</label><input type="number" name="metaRetencaoCartao" min="0" max="100" value="' + (g.metaRetencaoCartao || 0) + '"></div>' +
         '<div><label>Meta retenção Conta (%)</label><input type="number" name="metaRetencaoConta" min="0" max="100" value="' + (g.metaRetencaoConta || 0) + '"></div>' +
         '<div><label>Mês</label><input type="month" name="mes" value="' + state.month + '"></div>' +
+        (showMotor
+          ? '<div class="full"><label>Regra de comissão da retenção de Cartão de Crédito</label>' +
+            '<select name="motor">' +
+            '<option value=""' + (motorAtual === '' ? ' selected' : '') + '>Automática (pelo cargo)</option>' +
+            '<option value="fone"' + (motorAtual === 'fone' ? ' selected' : '') + '>Retenção Fone</option>' +
+            '<option value="digital"' + (motorAtual === 'digital' ? ' selected' : '') + '>Retenção Digital</option>' +
+            '</select><small class="muted">Afeta SOMENTE o cálculo do Cartão de Crédito — vendas, massificados, Conta Digital e Cashback não mudam.</small></div>'
+          : '') +
         '</div><div class="form-actions"><button class="btn ghost" type="button" onclick="App.closeModal()">Cancelar</button>' +
         '<button class="btn" type="submit">Salvar meta</button></div></form>';
+
       document.getElementById('fGoal').addEventListener('submit', function (ev) {
         ev.preventDefault();
+        const btn = ev.target.querySelector('button[type=submit]');
         const payload = { tipo: userId ? 'user' : 'team', alvoId: userId || state.session.user.equipe };
         new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
-        api('goals.set', payload).then(function () {
+        const motor = payload.motor; delete payload.motor; // motor vai para o cadastro do usuário, não para a meta
+        const calls = [api('goals.set', payload)];
+        if (showMotor && motor !== motorAtual) {
+          calls.push(api('users.update', { id: userId, motor: motor || 'auto' }));
+        }
+        lockWhile(btn, Promise.all(calls).then(function () {
           toast('Meta alterada!'); closeModal(); invalidate();
-        }).catch(function (e) { toast(e.message, true); });
+        }).catch(function (e) { toast(e.message, true); }));
       });
     }).catch(function (e) { toast(e.message, true); closeModal(); });
   }
@@ -943,11 +1029,12 @@ const App = (function () {
       '<button class="btn" type="submit">Salvar</button></div></form>');
     document.getElementById('fProd').addEventListener('submit', function (ev) {
       ev.preventDefault();
+      const btn = ev.target.querySelector('button[type=submit]');
       const payload = { id: p.id, categoria: 'Massificado' };
       new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
-      api('products.save', payload).then(function () {
+      lockWhile(btn, api('products.save', payload).then(function () {
         toast('Alterações salvas!'); closeModal(); invalidate(); go('configuracoes');
-      }).catch(function (e) { toast(e.message, true); });
+      }).catch(function (e) { toast(e.message, true); }));
     });
   }
   function productDelete(id) {
@@ -971,11 +1058,12 @@ const App = (function () {
       '<button class="btn" type="submit">Salvar</button></div></form>');
     document.getElementById('fTeam').addEventListener('submit', function (ev) {
       ev.preventDefault();
+      const btn = ev.target.querySelector('button[type=submit]');
       const payload = { id: t.id };
       new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
-      api('teams.save', payload).then(function () {
+      lockWhile(btn, api('teams.save', payload).then(function () {
         toast('Alterações salvas!'); closeModal(); invalidate(); go('cadastro');
-      }).catch(function (e) { toast(e.message, true); });
+      }).catch(function (e) { toast(e.message, true); }));
     });
   }
   function teamDelete(id) {

@@ -30,6 +30,8 @@ function salesCreate_(me, data) {
     equipe: me.equipe,
     criadoEm: nowIso_()
   };
+  // Anti-duplicidade: venda idêntica nos últimos 10s é bloqueada
+  assertNoRecentDuplicate_(SHEETS.SALES, sale, ['data', 'cpf', 'produto', 'quantidade'], 10);
   appendRow_(SHEETS.SALES, sale);
   audit_(me.email, 'SALE_CREATE', sale.produto + ' x' + qtd);
   return sale;

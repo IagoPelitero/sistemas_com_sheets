@@ -22,6 +22,9 @@ function api(action, payload) {
   payload = payload || {};
   try {
     migrationEnsure_(); // sincroniza registros legados (barato: cache 6h)
+    // Idempotência: escritas enviam reqId; repetição (duplo clique,
+    // retry de rede) é rejeitada aqui, antes de qualquer gravação.
+    dedupeGuard_(payload.reqId);
     const me = getCurrentUser_();
     let data;
 
@@ -86,6 +89,9 @@ function api(action, payload) {
       // ---- Relatórios ----
       case 'reports.generate': data = reportGenerate_(me, payload.tipo, payload.mes); break;
 
+      // ---- Importação dos sistemas antigos (SOMENTE ADMIN) ----
+      case 'import.legacy': data = importLegacy_(me, payload); break;
+
       // ---- Configurações (ADMIN) ----
       case 'settings.list':
         if (!isAdmin_(me)) throw new Error('Somente o ADMIN pode ver configurações.');
@@ -124,7 +130,8 @@ function api(action, payload) {
 function publicUser_(u) {
   return {
     id: u.id, nome: u.nome, email: u.email, cargo: u.cargo,
-    equipe: u.equipe, status: u.status, tema: u.tema || 'portobank'
+    equipe: u.equipe, status: u.status, tema: u.tema || 'portobank',
+    motor: String(u.motor || '')
   };
 }
 
