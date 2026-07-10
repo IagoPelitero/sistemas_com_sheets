@@ -45,12 +45,25 @@ function usersCreate_(me, data) {
     equipe: String(data.equipe || '').trim(),
     status: data.status || 'Ativo',
     tema: 'portobank',
+    motor: isAdmin_(me) ? normalizeMotor_(data.motor) : '',
     criadoEm: nowIso_(),
     atualizadoEm: nowIso_()
   };
   appendRow_(SHEETS.USERS, user);
   audit_(me.email, 'USER_CREATE', email);
   return user;
+}
+
+/**
+ * Valida o motor da regra do Cartão de Crédito.
+ * '' / 'auto' = automático pelo cargo | 'fone' | 'digital'.
+ * Afeta SOMENTE o cálculo do Cartão — nenhuma outra comissão.
+ */
+function normalizeMotor_(v) {
+  const m = String(v || '').toLowerCase().trim();
+  if (m === '' || m === 'auto') return '';
+  if (m === 'fone' || m === 'digital') return m;
+  throw new Error("Motor de comissão inválido. Use 'auto', 'fone' ou 'digital'.");
 }
 
 /**
@@ -78,6 +91,13 @@ function usersUpdate_(me, id, patch) {
     throw new Error('Somente o ADMIN pode promover a administrador ou supervisor.');
   }
   if (!isAdmin_(me)) delete allowed.equipe; // supervisor não move gente de equipe
+
+  // Motor do Cartão de Crédito: SOMENTE o ADMIN altera. Tratado
+  // fora do loop acima porque '' (automático) é um valor válido.
+  if (patch.motor !== undefined) {
+    if (!isAdmin_(me)) throw new Error('Somente o ADMIN pode alterar a regra de comissão do Cartão.');
+    allowed.motor = normalizeMotor_(patch.motor);
+  }
 
   allowed.atualizadoEm = nowIso_();
   if (!updateRowById_(SHEETS.USERS, id, allowed)) throw new Error('Falha ao atualizar usuário.');
