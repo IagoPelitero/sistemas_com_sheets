@@ -25,7 +25,9 @@ const SHEETS = {
 
 /** Cabeçalhos oficiais de cada aba. NUNCA reordenar sem migração. */
 const HEADERS = {
-  [SHEETS.USERS]: ['id', 'nome', 'email', 'cargo', 'equipe', 'status', 'tema', 'criadoEm', 'atualizadoEm'],
+  // motor: regra do Cartão de Crédito ('' = automático pelo cargo,
+  // 'fone' ou 'digital') — definido SOMENTE pelo ADMIN
+  [SHEETS.USERS]: ['id', 'nome', 'email', 'cargo', 'equipe', 'status', 'tema', 'motor', 'criadoEm', 'atualizadoEm'],
   [SHEETS.SALES]: ['id', 'data', 'cpf', 'produto', 'quantidade', 'obs', 'userId', 'equipe', 'criadoEm'],
   [SHEETS.RETENTION]: ['id', 'data', 'cpf', 'produto', 'resultado', 'obs', 'userId', 'equipe', 'criadoEm'],
   [SHEETS.GOALS]: ['id', 'tipo', 'alvoId', 'metaVendas', 'metaRetencaoCartao', 'metaRetencaoConta', 'mes', 'atualizadoEm'],
@@ -131,12 +133,11 @@ const DEFAULT_SETTINGS = {
     { retidos: 76, argumentacao: 42, valor: 100 },
     { retidos: 78, argumentacao: 44, valor: 200 }
   ]),
-  // ---- Cartão de Crédito (DIGITAL): pontos ----
-  // PDF 6.3.2: Argumentação R$1,50/retido (1,5 pt) e Incentivo
-  // Financeiro R$0,50/retido (0,5 pt) → valor do ponto = R$1,00.
-  'comissao.cartaoDigital.pontoIncentivo': '0.5',
-  'comissao.cartaoDigital.pontoArgumentacao': '1.5',
-  'comissao.cartaoDigital.valorPonto': '1',
+  // ---- Cartão de Crédito (DIGITAL): valores DIRETOS ----
+  // PDF 6.3.2: cada retenção por Argumentação vale R$1,50 e cada
+  // retenção por Incentivo vale R$0,50 — sem conversão por pontos.
+  'comissao.cartaoDigital.valorArgumentacao': '1.5',
+  'comissao.cartaoDigital.valorIncentivo': '0.5',
   // ---- Cashback (PDF 6.3.2): prêmio fixo por faixa de conversão ----
   'comissao.cashback.faixas': JSON.stringify([
     { pct: 36, valor: 50 },
@@ -200,7 +201,7 @@ const DEFAULT_SETTINGS = {
   'meta.padrao.retencaoConta': '75',
   // ---- Sistema ----
   'sistema.nome': 'PortoBank Performance',
-  'sistema.versao': '1.5.0'
+  'sistema.versao': '1.6.0'
 };
 
 /**

@@ -63,12 +63,19 @@ function ensureSheet_(name) {
 }
 
 /**
- * Gera um ID único usando SOMENTE caracteres hexadecimais (0-9, a-f):
- * 12 dígitos hex aleatórios do UUID + timestamp em hexadecimal.
- * Ex.: "3fa8c21b9de40197f4a2c8e1"
+ * Gera um ID único, CRESCENTE e somente hexadecimal (0-9, a-f):
+ *   [12 dígitos] timestamp em ms com zeros à esquerda — garante
+ *     ordenação cronológica por simples comparação de texto e só
+ *     "estoura" os 12 dígitos no ano ~10.889;
+ *   [12 dígitos] aleatórios do UUID — 2^48 (~281 trilhões) de
+ *     combinações POR MILISSEGUNDO, colisão desprezível.
+ * Ex.: "0197f4a2c8e13fa8c21b9de4" (24 caracteres).
+ * IDs antigos (aleatório+timestamp) continuam válidos: unicidade é
+ * por igualdade e nenhuma ordenação do sistema depende do id.
  */
 function uid_() {
-  return Utilities.getUuid().replace(/-/g, '').slice(0, 12) + Date.now().toString(16);
+  const ts = ('000000000000' + Date.now().toString(16)).slice(-12);
+  return ts + Utilities.getUuid().replace(/-/g, '').slice(0, 12);
 }
 
 /** Data/hora atual em ISO. */
@@ -113,6 +120,26 @@ function appendRow_(sheetName, obj) {
     const headers = headersOf_(sheet, sheetName);
     const row = headers.map(function (h) { return obj[h] !== undefined ? obj[h] : ''; });
     sheet.appendRow(row);
+  });
+  cacheInvalidate_(sheetName);
+}
+
+/**
+ * Acrescenta VÁRIAS linhas de uma vez (importações): uma única
+ * trava, um único setValues e uma única invalidação de cache —
+ * nunca uma escrita por linha.
+ * @param {string} sheetName
+ * @param {Object[]} objs
+ */
+function appendRows_(sheetName, objs) {
+  if (!objs.length) return;
+  withLock_(function () {
+    const sheet = ensureSheet_(sheetName);
+    const headers = headersOf_(sheet, sheetName);
+    const rows = objs.map(function (obj) {
+      return headers.map(function (h) { return obj[h] !== undefined ? obj[h] : ''; });
+    });
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
   });
   cacheInvalidate_(sheetName);
 }
@@ -257,6 +284,48 @@ function userNameMap_() {
   return map;
 }
 
+/**
+ * IDEMPOTÊNCIA anti-duplo-clique: cada operação de ESCRITA do
+ * cliente envia um reqId único; se o mesmo reqId chegar de novo
+ * (duplo clique, retry de rede, latência), a segunda chamada é
+ * rejeitada ANTES de gravar. Verificação sob lock (check-and-set
+ * atômico) com validade de 10 minutos no CacheService.
+ * @param {string=} reqId
+ */
+function dedupeGuard_(reqId) {
+  if (!reqId) return;
+  withLock_(function () {
+    const key = CACHE_PREFIX + 'req:' + String(reqId);
+    if (cache_().get(key)) {
+      throw new Error('Esta operação já foi processada — o clique duplo foi ignorado.');
+    }
+    cache_().put(key, '1', 600);
+  });
+}
+
+/**
+ * Segunda camada anti-duplicidade: rejeita um lançamento IDÊNTICO
+ * (mesmo usuário e mesmos campos) criado nos últimos `seconds`
+ * segundos — cobre duplo envio por duas abas/dispositivos, que o
+ * reqId não alcança.
+ * @param {string} sheetName
+ * @param {Object} candidate
+ * @param {string[]} fields Campos que definem "idêntico".
+ * @param {number} seconds Janela de proteção.
+ */
+function assertNoRecentDuplicate_(sheetName, candidate, fields, seconds) {
+  const cutoff = Date.now() - seconds * 1000;
+  const dup = readAll_(sheetName).some(function (r) {
+    if (String(r.userId) !== String(candidate.userId)) return false;
+    const t = new Date(r.criadoEm).getTime();
+    if (isNaN(t) || t < cutoff) return false;
+    return fields.every(function (f) { return String(r[f]) === String(candidate[f]); });
+  });
+  if (dup) {
+    throw new Error('Um lançamento idêntico foi registrado há poucos segundos — duplicidade bloqueada. Se for intencional, aguarde ' + seconds + 's e registre novamente.');
+  }
+}
+
 /** Registra evento de auditoria (best-effort, não bloqueia). */
 function audit_(quem, acao, detalhe) {
   try {
@@ -291,6 +360,19 @@ function toDateBR_(v) {
 /** Chave de mês 'yyyy-MM'. */
 function toMonthKey_(v) {
   return toDateKey_(v).slice(0, 7);
+}
+
+/**
+ * Normaliza o campo `mes` de uma linha da planilha para 'yyyy-MM'.
+ * O Sheets converte a string '2026-07' em DATA (1º/07/2026) ao
+ * gravar — sem esta normalização a comparação String(mes) nunca
+ * bate e as metas salvas "somem". Cobre: string 'yyyy-MM' pura,
+ * Date da célula e ISO vindo do cache.
+ */
+function monthKeyOf_(v) {
+  const s = String(v);
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  return toMonthKey_(v);
 }
 
 /** Percentual seguro (evita divisão por zero). */
