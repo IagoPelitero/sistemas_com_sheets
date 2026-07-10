@@ -1,6 +1,6 @@
-# Sistemas de Gestão de Vendas e Retenção (Google Planilhas)
+# Sistemas de Gestão de Vendas, Retenção e Performance (Google Planilhas)
 
-Este repositório reúne sistemas prontos para controlar **vendas** e **retenção de clientes** de uma equipe, direto pelo navegador, usando o **Google Planilhas** como "banco de dados". Não é preciso contratar servidor, hospedagem ou instalar nada: tudo roda dentro da conta Google da empresa, de graça, com o Google Apps Script.
+Este repositório reúne sistemas prontos para controlar **vendas**, **retenção de clientes** e a **performance completa** de uma equipe, direto pelo navegador, usando o **Google Planilhas** como "banco de dados". Não é preciso contratar servidor, hospedagem ou instalar nada: tudo roda dentro da conta Google da empresa, de graça, com o Google Apps Script.
 
 Este documento foi escrito em linguagem simples, para qualquer pessoa entender o que o sistema faz, mesmo sem experiência técnica.
 
@@ -16,6 +16,7 @@ No dia a dia de uma equipe de vendas/atendimento, é comum controlar tudo em pla
 - **Ranking** dos melhores desempenhos do mês.
 - **Relatórios** prontos para baixar (CSV), sem precisar mexer na planilha.
 - **Controle de acesso**: cada pessoa só vê o que pode ver (atendente vê o próprio desempenho; supervisor vê a própria equipe; administrador vê tudo).
+- **Correção rápida de erros**: cada pessoa pode excluir os próprios lançamentos mais recentes (errou, apagou e refez), e o supervisor pode corrigir lançamentos da própria equipe — tudo registrado no histórico.
 - **Histórico de tudo** (quem fez o quê e quando), para consulta e auditoria.
 
 ## 2. O que tem neste repositório
@@ -26,8 +27,9 @@ O repositório contém mais de um sistema, em pastas separadas. Você pode usar 
 |---|---|
 | [sistema_vendas_sheets/](sistema_vendas_sheets) | Sistema focado em **registro de vendas**, comissões, metas e relatórios. |
 | [sistema_retencao_sheets/](sistema_retencao_sheets) | Sistema focado em **registro de retenção de clientes** (evitar cancelamentos), com dashboards e ranking por equipe. |
+| [Sistema performance/](Sistema%20performance) | Sistema **completo de performance** (o mais avançado): vendas + retenção juntas, comissão automática por regras configuráveis, metas por pessoa e equipe, ranking mensal e semanal, dashboards com gráficos, relatórios CSV, auditoria com arquivamento automático e 7 perfis de acesso. |
 
-Cada pasta é independente e pode ser publicada separadamente como o seu próprio "site" (aplicativo web) dentro do Google. Cada uma contém apenas dois arquivos: o código do sistema (`Code.gs`) e a tela (`Index.html`).
+Cada pasta é independente e pode ser publicada separadamente como o seu próprio "site" (aplicativo web) dentro do Google. Os sistemas de vendas e de retenção contêm apenas dois arquivos cada (o código `Code.gs` e a tela `Index.html`); o sistema de performance é modular, com os arquivos organizados em uma pasta `src/` e instruções próprias de instalação no README dele.
 
 ## 3. Como o sistema funciona, de forma simples
 
@@ -57,7 +59,7 @@ Regra importante: um supervisor nunca enxerga a equipe de outro supervisor, e um
 
 1. Crie uma Planilha Google nova (ela será o "banco de dados" do sistema).
 2. Abra o menu **Extensões → Apps Script** dentro dessa planilha.
-3. Copie os arquivos da pasta do sistema escolhido para dentro do editor que abrir.
+3. Copie os arquivos da pasta do sistema escolhido para dentro do editor que abrir (no sistema de performance, os arquivos ficam na subpasta `src/`).
 4. Clique em **Implantar → Novo app da web** e siga as opções sugeridas na tela.
 5. Acesse o link gerado: a primeira pessoa a entrar vira automaticamente **Administrador**.
 
