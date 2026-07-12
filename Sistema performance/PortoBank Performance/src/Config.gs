@@ -201,7 +201,7 @@ const DEFAULT_SETTINGS = {
   'meta.padrao.retencaoConta': '75',
   // ---- Sistema ----
   'sistema.nome': 'PortoBank Performance',
-  'sistema.versao': '1.6.0'
+  'sistema.versao': '1.7.0'
 };
 
 /**

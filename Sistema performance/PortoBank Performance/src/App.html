@@ -19,6 +19,7 @@ const App = (function () {
     // virada do mês (21h–0h no Brasil), abriria o mês seguinte.
     month: todayLocal().slice(0, 7),
     rankingPeriodo: 'mes',  // 'mes' | 'semana'
+    gestaoTeam: '__todas__', // equipe selecionada na Gestão (ADMIN)
     cache: {},              // cache de cliente: chave página:mês
     charts: []              // instâncias Chart.js ativas
   };
@@ -528,10 +529,29 @@ const App = (function () {
     /* ---------- GESTÃO DA EQUIPE ---------- */
     gestao: function (el) {
       cached('users.list').then(function (users) {
+        const isAdminMe = state.session.user.cargo === 'ADMIN';
+        const teams = state.session.teams || [];
+        // ADMIN escolhe a equipe; supervisor sempre vê a própria
+        let sel = state.gestaoTeam || '__todas__';
+        if (sel !== '__todas__' && !teams.some(function (t) { return String(t.nome) === sel; })) {
+          sel = state.gestaoTeam = '__todas__';
+        }
+        const filtrados = (isAdminMe && sel !== '__todas__')
+          ? users.filter(function (u) { return String(u.equipe) === sel; })
+          : users;
+
         let html = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">' +
           '<h3 style="margin:0">Membros da equipe</h3>' +
-          '<button class="btn small" onclick="App.userForm()">+ Cadastrar membro</button></div>' +
-          table(['Nome', 'Email', 'Cargo', 'Status', 'Ações'], users.map(function (u) {
+          '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+          (isAdminMe
+            ? '<select id="gestTeamSel" title="Filtrar por equipe">' +
+              '<option value="__todas__"' + (sel === '__todas__' ? ' selected' : '') + '>Todas as equipes</option>' +
+              teams.map(function (t) {
+                return '<option' + (sel === String(t.nome) ? ' selected' : '') + '>' + esc(t.nome) + '</option>';
+              }).join('') + '</select>'
+            : '') +
+          '<button class="btn small" onclick="App.userForm()">+ Cadastrar membro</button></div></div>' +
+          table(['Nome', 'Email', 'Cargo', 'Status', 'Ações'], filtrados.map(function (u) {
             return '<tr><td><strong>' + esc(u.nome) + '</strong><br><small class="muted">' + esc(u.equipe) + '</small></td>' +
               '<td>' + esc(u.email) + '</td><td>' + esc(u.cargo) + '</td>' +
               '<td><span class="badge ' + (u.status === 'Ativo' ? 'ok' : 'neutral') + '">' + esc(u.status) + '</span></td>' +
@@ -540,11 +560,27 @@ const App = (function () {
               '<button class="btn small ghost" onclick="App.userForm(\'' + u.id + '\')">✏️</button> ' +
               '<button class="btn small ghost" onclick="App.goalForm(\'' + u.id + '\')">🎯</button> ' +
               '<button class="btn small danger" onclick="App.userDelete(\'' + u.id + '\')">🗑</button></td></tr>';
-          })) + '</div>';
+          }), isAdminMe && sel !== '__todas__' ? 'Nenhum membro nesta equipe.' : 'Nenhum usuário cadastrado.') + '</div>';
+
+        // Meta da equipe: ADMIN mira a equipe SELECIONADA; supervisor, a própria
+        const equipeMeta = isAdminMe ? (sel !== '__todas__' ? sel : null) : state.session.user.equipe;
         html += '<div class="card" style="margin-top:16px"><h3>Meta da equipe</h3>' +
           '<p class="muted">Defina a meta mensal aplicada aos membros sem meta individual.</p>' +
-          '<button class="btn small" style="margin-top:10px" onclick="App.goalForm()">Alterar meta da equipe</button></div>';
+          (equipeMeta
+            ? '<button class="btn small" id="btnMetaEquipe" style="margin-top:10px">Alterar meta da equipe "' + esc(equipeMeta) + '"</button>'
+            : '<p class="muted" style="margin-top:10px">Selecione uma equipe acima para alterar a meta dela.</p>');
+        html += '</div>';
         el.innerHTML = html;
+
+        const selEl = document.getElementById('gestTeamSel');
+        if (selEl) {
+          selEl.addEventListener('change', function () {
+            state.gestaoTeam = selEl.value;
+            go('gestao');
+          });
+        }
+        const bm = document.getElementById('btnMetaEquipe');
+        if (bm) bm.addEventListener('click', function () { goalForm(null, equipeMeta); });
       }).catch(function (e) { el.innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
     },
 
@@ -837,9 +873,11 @@ const App = (function () {
    *  valores VIGENTES, para o gestor não salvar padrões sem querer.
    *  ADMIN também define aqui a REGRA do Cartão de Crédito
    *  (Fone/Digital) do usuário — só o Cartão; nada mais muda. */
-  function goalForm(userId) {
+  function goalForm(userId, teamName) {
     const isTeam = !userId;
     const isAdminMe = state.session.user.cargo === 'ADMIN';
+    // Equipe-alvo: a selecionada na Gestão (ADMIN) ou a própria (supervisor)
+    const equipeAlvo = teamName || state.session.user.equipe;
     const alvoPromise = isTeam
       ? Promise.resolve(null)
       : cached('users.list').then(function (users) {
@@ -847,10 +885,10 @@ const App = (function () {
         });
 
     openModal('Definir meta', '<div class="empty">Carregando meta vigente…</div>');
-    const q = isTeam ? { tipo: 'team', mes: state.month } : { id: userId, mes: state.month };
+    const q = isTeam ? { tipo: 'team', alvoId: equipeAlvo, mes: state.month } : { id: userId, mes: state.month };
     Promise.all([api('goals.get', q), alvoPromise]).then(function (res) {
       const g = res[0], alvo = res[1];
-      const nome = isTeam ? state.session.user.equipe : (alvo ? alvo.nome : 'membro');
+      const nome = isTeam ? equipeAlvo : (alvo ? alvo.nome : 'membro');
       const showMotor = isAdminMe && !isTeam && !!alvo; // supervisor nunca vê/altera a regra
       const motorAtual = showMotor ? String(alvo.motor || '') : '';
 
@@ -875,7 +913,7 @@ const App = (function () {
       document.getElementById('fGoal').addEventListener('submit', function (ev) {
         ev.preventDefault();
         const btn = ev.target.querySelector('button[type=submit]');
-        const payload = { tipo: userId ? 'user' : 'team', alvoId: userId || state.session.user.equipe };
+        const payload = { tipo: userId ? 'user' : 'team', alvoId: userId || equipeAlvo };
         new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
         const motor = payload.motor; delete payload.motor; // motor vai para o cadastro do usuário, não para a meta
         const calls = [api('goals.set', payload)];
@@ -1038,9 +1076,16 @@ const App = (function () {
     });
   }
   function productDelete(id) {
-    api('products.delete', { id: id }).then(function () {
-      toast('Produto excluído!'); invalidate(); go('configuracoes');
-    }).catch(function (e) { toast(e.message, true); });
+    const p = state.session.products.find(function (x) { return String(x.id) === String(id); }) || {};
+    openModal('Excluir produto',
+      '<p>Excluir <strong>' + esc(p.nome || 'produto') + '</strong> definitivamente? Vendas já lançadas não são apagadas, mas o produto some dos formulários.</p>' +
+      '<div class="form-actions"><button class="btn ghost" onclick="App.closeModal()">Cancelar</button>' +
+      '<button class="btn danger" id="btnDelProd">Excluir definitivamente</button></div>');
+    document.getElementById('btnDelProd').addEventListener('click', function (ev) {
+      lockWhile(ev.target, api('products.delete', { id: id }).then(function () {
+        toast('Produto excluído!'); closeModal(); invalidate(); go('configuracoes');
+      }).catch(function (e) { toast(e.message, true); }));
+    });
   }
 
   /** Modal de equipe (ADMIN). Recebe o ID (nunca o objeto via
@@ -1067,9 +1112,16 @@ const App = (function () {
     });
   }
   function teamDelete(id) {
-    api('teams.delete', { id: id }).then(function () {
-      toast('Equipe excluída!'); invalidate(); go('cadastro');
-    }).catch(function (e) { toast(e.message, true); });
+    const t = state.session.teams.find(function (x) { return String(x.id) === String(id); }) || {};
+    openModal('Excluir equipe',
+      '<p>Excluir a equipe <strong>' + esc(t.nome || '') + '</strong> definitivamente? Os usuários e lançamentos dela NÃO são apagados, mas ficam sem equipe vinculada.</p>' +
+      '<div class="form-actions"><button class="btn ghost" onclick="App.closeModal()">Cancelar</button>' +
+      '<button class="btn danger" id="btnDelTeam">Excluir definitivamente</button></div>');
+    document.getElementById('btnDelTeam').addEventListener('click', function (ev) {
+      lockWhile(ev.target, api('teams.delete', { id: id }).then(function () {
+        toast('Equipe excluída!'); closeModal(); invalidate(); go('cadastro');
+      }).catch(function (e) { toast(e.message, true); }));
+    });
   }
 
   // ------------------ Público ------------------
