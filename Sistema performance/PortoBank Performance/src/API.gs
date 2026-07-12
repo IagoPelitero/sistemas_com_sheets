@@ -62,6 +62,12 @@ function api(action, payload) {
 
       // ---- Usuários ----
       case 'users.list':
+        // Lista nominal (nome/e-mail/cargo) é recurso de GESTÃO:
+        // atendentes não podem enumerar colegas — para eles a
+        // equipe aparece somente anonimizada (teamBuild_).
+        if (!getPermissions_(me).canManageUsers) {
+          throw new Error('Sem permissão para listar usuários.');
+        }
         data = visibleUsers_(me).map(publicUser_);
         break;
       case 'users.create': data = publicUser_(usersCreate_(me, payload)); break;

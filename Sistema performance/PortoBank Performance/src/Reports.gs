@@ -21,7 +21,7 @@ function reportGenerate_(me, tipo, monthKey) {
   if (!getPermissions_(me).canReports) throw new Error('Sem permissão para gerar relatórios.');
   if (REPORT_TYPES.indexOf(tipo) === -1) throw new Error('Tipo de relatório inválido.');
 
-  const mk = monthKey || toMonthKey_(new Date());
+  const mk = sanitizeMonthKey_(monthKey);
   const scope = isAdmin_(me) ? 'all' : 'team';
   // Mapa id → nome montado UMA vez — nunca por linha do CSV
   const nomes = userNameMap_();
@@ -90,7 +90,14 @@ function reportGenerate_(me, tipo, monthKey) {
   audit_(me.email, 'REPORT', tipo + ' (' + mk + ')');
 
   const csv = rows.map(function (r) {
-    return r.map(function (c) { return '"' + String(c === undefined ? '' : c).replace(/"/g, '""') + '"'; }).join(';');
+    return r.map(function (c) {
+      let s = String(c === undefined ? '' : c);
+      // Anti CSV-injection: célula começando com = + - @ viraria
+      // FÓRMULA ao abrir no Excel/Sheets (obs/nomes são texto livre).
+      // Números legítimos (ex.: -5) passam intactos.
+      if (/^[=+\-@]/.test(s) && !/^-?\d+([.,]\d+)?$/.test(s)) s = "'" + s;
+      return '"' + s.replace(/"/g, '""') + '"';
+    }).join(';');
   }).join('\r\n');
 
   return { filename: 'portobank_' + tipo.toLowerCase() + '_' + mk + '.csv', csv: '\ufeff' + csv };

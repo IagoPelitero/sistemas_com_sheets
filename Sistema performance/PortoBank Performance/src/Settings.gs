@@ -66,6 +66,20 @@ function settingDescription_(key) {
  */
 function settingsUpdate_(me, chave, valor) {
   if (!isAdmin_(me)) throw new Error('Somente o ADMIN pode alterar configurações.');
+
+  // Chaves cujo padrão é JSON só aceitam JSON válido — um valor
+  // malformado zeraria silenciosamente as regras de comissão
+  // (settingJson_ cairia no padrão sem avisar ninguém).
+  const def = DEFAULT_SETTINGS[chave];
+  if (def !== undefined) {
+    let defIsJson = false;
+    try { defIsJson = typeof JSON.parse(def) === 'object'; } catch (e) { /* padrão não é JSON */ }
+    if (defIsJson) {
+      try { JSON.parse(valor); }
+      catch (e) { throw new Error('Valor inválido para "' + chave + '": JSON malformado. Nada foi salvo.'); }
+    }
+  }
+
   const rows = readAll_(SHEETS.SETTINGS);
   const found = rows.find(function (r) { return String(r.chave) === chave; });
 

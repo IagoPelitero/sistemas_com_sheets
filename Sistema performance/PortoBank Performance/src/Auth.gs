@@ -29,25 +29,41 @@ function getSessionEmail_() {
  */
 function getCurrentUser_() {
   const email = getSessionEmail_();
-  const users = readAll_(SHEETS.USERS);
+  let users = readAll_(SHEETS.USERS);
 
   // ---- PRIMEIRO LOGIN: nenhum usuário cadastrado ----
   if (users.length === 0) {
-    const admin = {
-      id: uid_(),
-      nome: email.split('@')[0],
-      email: email,
-      cargo: ROLES.ADMIN,
-      equipe: 'Administração',
-      status: 'Ativo',
-      tema: 'portobank',
-      criadoEm: nowIso_(),
-      atualizadoEm: nowIso_()
-    };
-    appendRow_(SHEETS.USERS, admin); // registrado NORMALMENTE na aba Users
-    ensureDefaultSettings_();         // popula comissões/produtos padrão
-    audit_(email, 'BOOTSTRAP', 'Primeiro login: ADMIN criado automaticamente');
-    return admin;
+    // Corrida do bootstrap: dois primeiros acessos simultâneos não
+    // podem criar dois ADMINs. A reconferência acontece DENTRO da
+    // trava, direto na planilha (sem cache), e a gravação é feita
+    // no mesmo bloco (LockService não é reentrante — nada de
+    // appendRow_ aqui dentro).
+    const admin = withLock_(function () {
+      const sheet = ensureSheet_(SHEETS.USERS);
+      if (sheet.getLastRow() >= 2) return null; // outro acesso venceu a corrida
+      const a = {
+        id: uid_(),
+        nome: email.split('@')[0],
+        email: email,
+        cargo: ROLES.ADMIN,
+        equipe: 'Administração',
+        status: 'Ativo',
+        tema: 'portobank',
+        motor: '',
+        criadoEm: nowIso_(),
+        atualizadoEm: nowIso_()
+      };
+      const headers = headersOf_(sheet, SHEETS.USERS);
+      sheet.appendRow(headers.map(function (h) { return a[h] !== undefined ? a[h] : ''; }));
+      return a;
+    });
+    cacheInvalidate_(SHEETS.USERS);
+    if (admin) {
+      ensureDefaultSettings_();       // popula comissões/produtos padrão
+      audit_(email, 'BOOTSTRAP', 'Primeiro login: ADMIN criado automaticamente');
+      return admin;
+    }
+    users = readAll_(SHEETS.USERS);   // segue o fluxo normal com o usuário criado pelo outro acesso
   }
 
   const user = users.find(function (u) { return String(u.email).toLowerCase().trim() === email; });

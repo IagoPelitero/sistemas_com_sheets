@@ -18,6 +18,14 @@ function salesCreate_(me, data) {
   if (!data.produto) throw new Error('Produto é obrigatório.');
   const qtd = parseInt(data.quantidade, 10);
   if (!qtd || qtd < 1) throw new Error('Quantidade deve ser maior que zero.');
+  if (qtd > 1000) throw new Error('Quantidade acima do limite (1000) — confira o valor digitado.');
+
+  // Produto precisa existir e estar ativo — um payload manipulado
+  // não pode poluir a base com produtos inventados
+  const produtoOk = readAll_(SHEETS.PRODUCTS).some(function (p) {
+    return String(p.nome) === String(data.produto).trim() && String(p.ativo) !== 'Não';
+  });
+  if (!produtoOk) throw new Error('Produto inválido ou inativo.');
 
   const sale = {
     id: uid_(),
@@ -75,7 +83,7 @@ function salesDelete_(me, id) {
  * @param {string=} monthKey 'yyyy-MM' (padrão: mês atual)
  */
 function salesQuery_(me, scope, monthKey) {
-  const mk = monthKey || toMonthKey_(new Date());
+  const mk = sanitizeMonthKey_(monthKey);
   return readAll_(SHEETS.SALES).filter(function (s) {
     if (toMonthKey_(s.data) !== mk) return false;
     if (scope === 'self') return String(s.userId) === String(me.id);
