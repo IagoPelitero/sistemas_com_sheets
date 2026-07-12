@@ -84,18 +84,28 @@ function nowIso_() {
 }
 
 /**
- * Lê TODAS as linhas de uma aba como objetos — com cache.
- * Esta é a ÚNICA função de leitura em massa do sistema.
+ * Memo POR EXECUÇÃO: uma mesma chamada de api() lê cada aba no
+ * máximo UMA vez. Sem isto, montar um dashboard desserializava a
+ * aba Settings do CacheService dezenas de vezes (cada settingGet_
+ * refazia fetch + JSON.parse). Invalidação em cacheInvalidate_.
+ */
+var EXEC_ROWS_ = {};
+
+/**
+ * Lê TODAS as linhas de uma aba como objetos — com memo de
+ * execução + CacheService. ÚNICA função de leitura em massa.
  * @param {string} sheetName
  * @return {Object[]} linhas como objetos {header: valor}
  */
 function readAll_(sheetName) {
+  if (EXEC_ROWS_[sheetName]) return EXEC_ROWS_[sheetName];
+
   const cached = cacheGet_(sheetName);
-  if (cached) return cached;
+  if (cached) { EXEC_ROWS_[sheetName] = cached; return cached; }
 
   const sheet = ensureSheet_(sheetName);
   const lastRow = sheet.getLastRow();
-  if (lastRow < 2) { cachePut_(sheetName, []); return []; }
+  if (lastRow < 2) { cachePut_(sheetName, []); EXEC_ROWS_[sheetName] = []; return []; }
 
   const headers = headersOf_(sheet, sheetName);
   const values = sheet.getRange(2, 1, lastRow - 1, headers.length).getValues();
@@ -105,6 +115,7 @@ function readAll_(sheetName) {
     return obj;
   });
   cachePut_(sheetName, rows);
+  EXEC_ROWS_[sheetName] = rows;
   return rows;
 }
 
@@ -360,6 +371,16 @@ function toDateBR_(v) {
 /** Chave de mês 'yyyy-MM'. */
 function toMonthKey_(v) {
   return toDateKey_(v).slice(0, 7);
+}
+
+/**
+ * Sanitiza um mês vindo do CLIENTE: aceita apenas 'yyyy-MM';
+ * vazio ou malformado cai no mês atual. Evita que um payload
+ * manipulado gere períodos absurdos ou quebre daysInMonth_.
+ */
+function sanitizeMonthKey_(mk) {
+  const s = String(mk || '');
+  return /^\d{4}-\d{2}$/.test(s) ? s : toMonthKey_(new Date());
 }
 
 /**

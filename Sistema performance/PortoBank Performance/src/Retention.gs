@@ -85,7 +85,7 @@ function retentionDelete_(me, id) {
  * @param {string=} monthKey
  */
 function retentionQuery_(me, scope, monthKey) {
-  const mk = monthKey || toMonthKey_(new Date());
+  const mk = sanitizeMonthKey_(monthKey);
   return readAll_(SHEETS.RETENTION).filter(function (r) {
     if (toMonthKey_(r.data) !== mk) return false;
     if (scope === 'self') return String(r.userId) === String(me.id);

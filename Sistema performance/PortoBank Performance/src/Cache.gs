@@ -76,12 +76,15 @@ function cachePut_(sheetName, rows) {
 }
 
 /**
- * Invalida o cache de UMA aba (troca o version token).
+ * Invalida o cache de UMA aba (troca o version token) e o memo
+ * da execução atual — a próxima leitura desta mesma chamada já
+ * enxerga o dado recém-escrito.
  * Escritas nunca apagam caches de outras abas.
  * @param {string} sheetName
  */
 function cacheInvalidate_(sheetName) {
   cache_().put(CACHE_PREFIX + 'v:' + sheetName, String(Date.now()), 21600);
+  delete EXEC_ROWS_[sheetName];
 }
 
 /** Limpa todo o cache do sistema (uso administrativo). */

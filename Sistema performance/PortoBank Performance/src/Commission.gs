@@ -258,7 +258,7 @@ function commissionMassificados_(rows) {
  * @return {Object} composição completa da comissão
  */
 function commissionForUser_(user, monthKey) {
-  const mk = monthKey || toMonthKey_(new Date());
+  const mk = sanitizeMonthKey_(monthKey);
   const sales = salesQuery_(user, 'self', mk);
   const rets = retentionQuery_(user, 'self', mk);
   const stats = retentionStats_(rets);

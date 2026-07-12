@@ -19,7 +19,7 @@
  * @param {string=} periodo 'mes' (padrão) | 'semana'
  */
 function rankingBuild_(me, monthKey, periodo) {
-  const mk = monthKey || toMonthKey_(new Date());
+  const mk = sanitizeMonthKey_(monthKey);
   const weekly = periodo === 'semana';
   const showNames = isAdmin_(me) || isSupervisor_(me);
   const users = visibleUsers_(me).filter(function (u) { return u.status === 'Ativo'; });

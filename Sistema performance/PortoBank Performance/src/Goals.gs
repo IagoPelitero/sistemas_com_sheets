@@ -12,7 +12,7 @@
  * meta da equipe, senão padrão do sistema).
  */
 function goalForUser_(user, monthKey) {
-  const mk = monthKey || toMonthKey_(new Date());
+  const mk = sanitizeMonthKey_(monthKey);
   const goals = readAll_(SHEETS.GOALS);
 
   const own = goals.find(function (g) {
@@ -50,7 +50,7 @@ function normalizeGoal_(g) {
  */
 function goalsGetFor_(me, q) {
   q = q || {};
-  const mk = q.mes || toMonthKey_(new Date());
+  const mk = sanitizeMonthKey_(q.mes);
 
   if (q.tipo === 'team') {
     const alvo = q.alvoId || me.equipe;
@@ -90,7 +90,7 @@ function goalsSet_(me, data) {
   const perms = getPermissions_(me);
   if (!perms.canEditGoals) throw new Error('Sem permissão para alterar metas.');
 
-  const mk = data.mes || toMonthKey_(new Date());
+  const mk = sanitizeMonthKey_(data.mes);
   if (!isAdmin_(me)) {
     if (data.tipo === 'team' && String(data.alvoId) !== String(me.equipe)) {
       throw new Error('Você só pode alterar metas da sua equipe.');

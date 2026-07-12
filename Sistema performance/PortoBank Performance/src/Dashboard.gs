@@ -15,7 +15,7 @@
  * (Números da equipe ficam nas abas Equipe e Gestão da Equipe.)
  */
 function dashboardBuild_(me, monthKey) {
-  const mk = monthKey || toMonthKey_(new Date());
+  const mk = sanitizeMonthKey_(monthKey);
 
   // Escopo estritamente individual: cada registro conta UMA vez,
   // no dashboard de quem o preencheu.
@@ -71,7 +71,7 @@ function dashboardBuild_(me, monthKey) {
  * Aba EQUIPE — dados ANONIMIZADOS (sem nomes).
  */
 function teamBuild_(me, monthKey) {
-  const mk = monthKey || toMonthKey_(new Date());
+  const mk = sanitizeMonthKey_(monthKey);
   const teamSales = salesQuery_(me, isAdmin_(me) ? 'all' : 'team', mk);
   const teamRets = retentionQuery_(me, isAdmin_(me) ? 'all' : 'team', mk);
   const members = visibleUsers_(me);
@@ -81,9 +81,6 @@ function teamBuild_(me, monthKey) {
   teamSales.forEach(function (s) {
     byMemberSales[s.userId] = (byMemberSales[s.userId] || 0) + (parseInt(s.quantidade, 10) || 1);
   });
-  const salesAnon = Object.keys(byMemberSales)
-    .map(function (id, i) { return { rotulo: 'Colega ' + (i + 1), quantidade: byMemberSales[id], propria: String(id) === String(me.id) }; })
-    .sort(function (a, b) { return b.quantidade - a.quantidade; });
 
   // Atendidos/retenção por membro — SEM nomes e POR PRODUTO
   // (Cartão e Conta nunca se misturam no cálculo das %s)
@@ -97,11 +94,24 @@ function teamBuild_(me, monthKey) {
     slot.a++;
     if (r.resultado === 'Retido' || r.resultado === 'Retido por Incentivo' || r.resultado === 'Retido por Argumentação') slot.r++;
   });
+
+  // Rótulo anônimo ESTÁVEL: o mesmo membro é o mesmo "Colega N"
+  // na tabela de vendas E na de retenção (antes cada tabela
+  // numerava por conta própria e os rótulos não batiam entre si)
+  const rotuloDe = {};
+  Object.keys(byMemberSales).concat(Object.keys(byMemberRet)).forEach(function (id) {
+    if (!(id in rotuloDe)) rotuloDe[id] = 'Colega ' + (Object.keys(rotuloDe).length + 1);
+  });
+
+  const salesAnon = Object.keys(byMemberSales)
+    .map(function (id) { return { rotulo: rotuloDe[id], quantidade: byMemberSales[id], propria: String(id) === String(me.id) }; })
+    .sort(function (a, b) { return b.quantidade - a.quantidade; });
+
   const retAnon = Object.keys(byMemberRet)
-    .map(function (id, i) {
+    .map(function (id) {
       const m = byMemberRet[id];
       return {
-        rotulo: 'Colega ' + (i + 1),
+        rotulo: rotuloDe[id],
         atendidosCartao: m.cartao.a, pctCartao: pct_(m.cartao.r, m.cartao.a),
         atendidosConta: m.conta.a, pctConta: pct_(m.conta.r, m.conta.a),
         propria: String(id) === String(me.id)
