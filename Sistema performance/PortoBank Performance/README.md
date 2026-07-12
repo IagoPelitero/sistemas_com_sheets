@@ -200,6 +200,7 @@ A aba `Audit` cresce continuamente; a rotação mantém a planilha principal lev
 
 - Meta **individual** (por usuário) tem prioridade; sem ela vale a meta **da equipe**; sem nenhuma, valem os padrões (`meta.padrao.*`).
 - O modal 🎯 (Gestão da Equipe) abre com os **valores vigentes** do alvo e grava por mês (`yyyy-MM`).
+- **ADMIN na Gestão da Equipe**: um seletor no topo filtra por equipe ("Todas as equipes" ou uma específica); com uma equipe selecionada, o botão "Alterar meta da equipe" mira exatamente **aquela** equipe (não mais a do próprio ADMIN). O 🎯 de cada linha continua definindo a meta individual de qualquer usuário.
 - **ADMIN** altera a meta de qualquer usuário (inclusive a própria) e também a regra do Cartão (motor). **Supervisor** altera apenas metas de membros da própria equipe — nunca de outra equipe, nunca configurações globais, nunca o motor.
 - Robustez: o Google Sheets converte o texto `2026-07` em DATA ao gravar; o sistema normaliza o campo `mes` na leitura (`monthKeyOf_`), então metas antigas e novas são sempre encontradas, sem migração.
 
@@ -235,7 +236,8 @@ Todo registro recebe um id hexadecimal de 24 caracteres: **12 dígitos de timest
 
 ## 16. Cache — como funciona e como usar
 
-- `readAll_(aba)` → tenta o cache; se vazio, lê a planilha **uma vez** e grava em chunks (TTL 5 min).
+- **Memo por execução**: dentro de uma mesma chamada `api()`, cada aba é desserializada no máximo **uma vez** (`EXEC_ROWS_`) — montar um dashboard deixou de refazer fetch+parse da aba Settings dezenas de vezes. Escritas invalidam o memo junto com o CacheService.
+- `readAll_(aba)` → tenta o memo, depois o cache; se vazio, lê a planilha **uma vez** e grava em chunks (TTL 5 min).
 - Toda escrita (`appendRow_`, `updateRowById_`, `deleteRowById_`) troca o *version token* da aba → a próxima leitura recarrega **somente aquela aba**.
 - O cliente mantém cache por página+mês e o limpa após qualquer escrita → **atualização imediata** após cadastrar venda/retenção/usuário/meta.
 - Para forçar limpeza geral: execute `cacheFlushAll_()` no editor.
@@ -243,10 +245,14 @@ Todo registro recebe um id hexadecimal de 24 caracteres: **12 dígitos de timest
 ## 17. Boas práticas adotadas
 
 - Funções internas com sufixo `_` (não invocáveis pelo cliente); único endpoint público `api()`.
-- `LockService` em toda escrita (concorrência segura).
-- Validação de entrada no servidor (CPF, produto/resultado, cargos, escopos).
+- `LockService` em toda escrita (concorrência segura) — inclusive no **primeiro login** (dois acessos simultâneos nunca criam dois ADMINs).
+- Validação de entrada no servidor (CPF, produto ativo, quantidade máxima, resultado por produto, cargos, escopos, mês `yyyy-MM`).
+- **Lista nominal de usuários só para gestão**: `users.list` exige permissão de gerenciamento — atendentes veem colegas apenas anonimizados.
+- **Configurações JSON validadas antes de salvar** — um JSON malformado não zera regras de comissão silenciosamente.
+- **CSV protegido contra fórmulas** (células iniciadas em `=`, `+`, `-`, `@` são neutralizadas ao abrir no Excel/Sheets).
 - CPF mascarado na exibição e nos relatórios (LGPD).
-- Auditoria de todas as operações relevantes (aba `Audit`).
+- Auditoria de todas as operações relevantes (aba `Audit`): quem, quando e o quê — inclui alterações de metas (`GOAL_SET`), de comissões (`SETTING_UPDATE`) e exclusões.
+- Confirmação antes de toda exclusão definitiva (usuário, produto, equipe, lançamento).
 - Zero duplicação: camada de dados única em `Utils.gs`.
 
 ## 18. Troubleshooting

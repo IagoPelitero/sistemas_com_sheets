@@ -3,6 +3,27 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.7.0] — 2026-07-12 (auditoria técnica)
+### Corrigido
+- **Gestão da Equipe (ADMIN)**: agora há um seletor de equipes no topo — o ADMIN filtra os membros por equipe e o botão "Alterar meta da equipe" mira a equipe SELECIONADA (antes mirava sempre a equipe do próprio ADMIN, tornando impossível definir meta das equipes reais). Supervisor permanece restrito à própria equipe.
+- **Rótulos anônimos inconsistentes na aba Equipe**: "Colega 1" da tabela de vendas não era o "Colega 1" da tabela de retenção; o rótulo agora é estável por membro nas duas tabelas.
+- **Exclusão de produto/equipe sem confirmação**: um clique no 🗑 apagava na hora; agora há modal de confirmação com o nome do alvo e trava anti-duplo-clique.
+
+### Segurança
+- `users.list` agora exige permissão de gestão — atendentes não conseguem mais enumerar nome/e-mail/cargo dos colegas pela API (na interface eles já viam tudo anonimizado; a brecha era via chamada direta).
+- **Anti CSV-injection** nos relatórios: células iniciadas em `=`, `+`, `-`, `@` são neutralizadas (obs e nomes são texto livre e viravam fórmula no Excel).
+- **Validação de JSON** em Configurações: valor malformado é rejeitado com erro claro (antes era salvo e as regras de comissão caíam silenciosamente nos padrões).
+- **Validação reforçada em Nova Venda**: produto precisa existir e estar ativo; quantidade limitada a 1000 por lançamento.
+- **Bootstrap sob trava**: dois primeiros acessos simultâneos não criam mais dois ADMINs (reconferência dentro do LockService).
+- Mês vindo do cliente sanitizado em todos os módulos (`sanitizeMonthKey_`): payload malformado cai no mês atual em vez de gerar períodos inválidos.
+
+### Otimizado
+- **Memo por execução no `readAll_`** (`EXEC_ROWS_`): cada aba é desserializada no máximo uma vez por chamada `api()`. Montar um dashboard refazia fetch+JSON.parse da aba Settings ~15×; relatórios de comissão repetiam isso por usuário. Menos CPU por requisição e melhor tempo de resposta com usuários simultâneos (14 hoje, folga para 20+).
+
+### Notas da auditoria
+- Capacidade: com 14–20 usuários o sistema opera com folga — leituras servidas do CacheService, escritas serializadas por LockService, auto-refresh consultando só o carimbo de versão. O limite estrutural é o Google Sheets (10 milhões de células), mitigável com arquivamento anual nos moldes da auditoria.
+- Histórico de alterações já é auditado: metas (`GOAL_SET`), comissões (`SETTING_UPDATE`), usuários, exclusões e importações registram quem/quando/o quê na aba `Audit`.
+
 ## [1.6.0] — 2026-07-10
 ### Corrigido
 - **Definir Meta funcionava mas a meta "sumia"**: o Google Sheets converte o texto do mês ('2026-07') em DATA ao gravar, e a comparação por texto nunca mais encontrava a meta salva. O campo `mes` agora é normalizado na leitura (`monthKeyOf_`), corrigindo também retroativamente as metas já gravadas. ADMIN altera metas de todos (inclusive a própria); supervisor, apenas de membros da sua equipe — validado no servidor.
