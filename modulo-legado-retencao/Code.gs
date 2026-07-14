@@ -1,3 +1,28 @@
+/**
+ * ============================================================
+ * Módulo Legado – Retenção · Pelitero Labs
+ * ------------------------------------------------------------
+ * FINALIDADE
+ *   Sistema precursor de controle operacional de RETENÇÃO de
+ *   clientes sobre Google Apps Script + Google Sheets: registro
+ *   de atendimentos, dashboards, comissões e ranking por equipe.
+ *
+ * RESPONSABILIDADE DESTE ARQUIVO
+ *   Todo o backend do módulo: autenticação por conta Google,
+ *   cache (CacheService), trava de escrita (LockService),
+ *   estatísticas, cálculo central de comissões, visão do
+ *   supervisor, ranking e exportação CSV. A interface está em
+ *   Index.html.
+ *
+ * RELAÇÃO COM O PRISMA PERFORMANCE
+ *   Este módulo foi SUCEDIDO pelo Prisma Performance
+ *   (../prisma-performance), que unifica vendas + retenção com
+ *   arquitetura modular. Mantido no repositório como registro
+ *   da evolução do produto e para importação do histórico
+ *   (Prisma → Configurações → Importar sistemas antigos).
+ * ============================================================
+ */
+
 // ============================================================================
 // CONSTANTES E CONFIGURAÇÕES GLOBAIS
 // ============================================================================
@@ -121,7 +146,7 @@ function invalidarCacheUsuarios() {
 
 function doGet() {
   return HtmlService.createTemplateFromFile('Index')
-    .evaluate().setTitle('Retenção')
+    .evaluate().setTitle('Módulo Legado – Retenção · Pelitero Labs')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }

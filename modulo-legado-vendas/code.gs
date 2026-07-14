@@ -1,5 +1,25 @@
-/** SISTEMA DE VENDAS PORTO - VERSÃO FINAL COMPLETA
- * Contém: LockService, Projeção de Meta, Auditoria, Comissões, Permissões e Relatórios
+/**
+ * ============================================================
+ * Módulo Legado – Vendas · Pelitero Labs
+ * ------------------------------------------------------------
+ * FINALIDADE
+ *   Sistema precursor de controle operacional de VENDAS sobre
+ *   Google Apps Script + Google Sheets: registro de vendas,
+ *   comissões por faixa de meta, gestão de equipe e relatórios.
+ *
+ * RESPONSABILIDADE DESTE ARQUIVO
+ *   Todo o backend do módulo: autenticação por conta Google,
+ *   cache (CacheService), trava de escrita (LockService),
+ *   dashboard, comissões, metas, administração e auditoria.
+ *   A interface (SPA simples) está em Index.html.
+ *
+ * RELAÇÃO COM O PRISMA PERFORMANCE
+ *   Este módulo foi SUCEDIDO pelo Prisma Performance
+ *   (../prisma-performance), que unifica vendas + retenção com
+ *   arquitetura modular. Mantido no repositório como registro
+ *   da evolução do produto e para importação do histórico
+ *   (Prisma → Configurações → Importar sistemas antigos).
+ * ============================================================
  */
 
 const SPREADSHEET_ID = 'id_sheets';
@@ -35,7 +55,7 @@ function getSpreadsheet() { return SpreadsheetApp.openById(SPREADSHEET_ID); }
 
 function doGet(e) {
   return HtmlService.createTemplateFromFile('Index')
-    .evaluate().setTitle('Sistema de Vendas Porto')
+    .evaluate().setTitle('Módulo Legado – Vendas · Pelitero Labs')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }

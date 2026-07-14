@@ -6,8 +6,8 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <style>
-    :root, [data-theme="porto"] {
-      /* TEMA PORTO (PADRÃO) */
+    :root, [data-theme="prisma"] {
+      /* TEMA PRISMA (PADRÃO) */
       --primary: #004691; 
       --secondary: #00a1e0; 
       --accent: #ffcc00; 
@@ -117,7 +117,7 @@
     /* THEME SWITCHER */
     .theme-switcher { display: flex; gap: 8px; padding: 5px; background: rgba(0,0,0,0.05); border-radius: 20px; }
     .theme-btn { width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-    .theme-btn[data-theme-id="porto"] { background-color: #004691; }
+    .theme-btn[data-theme-id="prisma"] { background-color: #004691; }
     .theme-btn[data-theme-id="brazil"] { background-color: #009c3b; }
     .theme-btn[data-theme-id="pink"] { background-color: #d81b60; }
     .theme-btn[data-theme-id="dark"] { background-color: #2c3e50; border-color: #bdc3c7; }
@@ -235,7 +235,7 @@
 }
   </style>
 </head>
-<body data-theme="porto">
+<body data-theme="prisma">
   
   <div id="loader"><div class="spinner"></div></div>
 
@@ -258,7 +258,7 @@
       <div class="header-container">
         <h1>Painel de Resultados</h1>
         <div id="theme-switcher-resumo" class="theme-switcher hidden">
-          <button title="Tema Porto" class="theme-btn" data-theme-id="porto" onclick="changeTheme('porto')"></button>
+          <button title="Tema Prisma" class="theme-btn" data-theme-id="prisma" onclick="changeTheme('prisma')"></button>
           <button title="Tema Brasil" class="theme-btn" data-theme-id="brazil" onclick="changeTheme('brazil')"></button>
           <button title="Tema Rosa" class="theme-btn" data-theme-id="pink" onclick="changeTheme('pink')"></button>
         <button title="Tema Escuro" class="theme-btn" data-theme-id="dark" onclick="changeTheme('dark')"></button>
@@ -354,7 +354,7 @@
       <div class="header-container">
         <h1>Gestão da Equipe</h1>
         <div id="theme-switcher-equipe" class="theme-switcher hidden">
-          <button title="Tema Porto" class="theme-btn" data-theme-id="porto" onclick="changeTheme('porto')"></button>
+          <button title="Tema Prisma" class="theme-btn" data-theme-id="prisma" onclick="changeTheme('prisma')"></button>
           <button title="Tema Brasil" class="theme-btn" data-theme-id="brazil" onclick="changeTheme('brazil')"></button>
           <button title="Tema Rosa" class="theme-btn" data-theme-id="pink" onclick="changeTheme('pink')"></button>
         <button title="Tema Escuro" class="theme-btn" data-theme-id="dark" onclick="changeTheme('dark')"></button>
@@ -425,7 +425,7 @@
         <div class="admin-header-actions">
           <button id="btnViewLogs" class="btn hidden" style="width: auto; background: #7f8c8d;" onclick="openLogsModal()">Ver Logs de Auditoria</button>
           <div id="theme-switcher-admin" class="theme-switcher hidden">
-            <button title="Tema Porto" class="theme-btn" data-theme-id="porto" onclick="changeTheme('porto')"></button>
+            <button title="Tema Prisma" class="theme-btn" data-theme-id="prisma" onclick="changeTheme('prisma')"></button>
             <button title="Tema Brasil" class="theme-btn" data-theme-id="brazil" onclick="changeTheme('brazil')"></button>
             <button title="Tema Rosa" class="theme-btn" data-theme-id="pink" onclick="changeTheme('pink')"></button>
           <button title="Tema Escuro" class="theme-btn" data-theme-id="dark" onclick="changeTheme('dark')"></button>
@@ -506,7 +506,7 @@
     let notificationTimeout = null;
 
     window.onload = function() {
-      const savedTheme = localStorage.getItem('selectedTheme') || 'porto';
+      const savedTheme = localStorage.getItem('selectedTheme') || 'prisma';
       changeTheme(savedTheme);
 
       const hoje = new Date();
@@ -890,5 +890,6 @@
       document.getElementById('logModal').classList.add('hidden');
     }
   </script>
+  <footer style="text-align:center;padding:14px 8px;opacity:.55;font-size:.75rem;letter-spacing:.06em">MÓDULO LEGADO – VENDAS · PELITERO LABS</footer>
 </body>
 </html>
