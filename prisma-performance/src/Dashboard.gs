@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Dashboard.gs
+ * Prisma Performance — Dashboard.gs
  * ------------------------------------------------------------
  * Monta os dados prontos para renderização dos dashboards.
  * Todo o cálculo pesado acontece no servidor, em UMA chamada,

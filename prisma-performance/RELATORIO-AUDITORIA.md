@@ -1,4 +1,4 @@
-# Relatório de Auditoria — PortoBank Performance v1.4.0
+# Relatório de Auditoria — Prisma Performance v1.4.0
 
 Data: 09/07/2026 · Escopo: manutenção corretiva (sem refatoração, sem mudança de arquitetura, telas preservadas)
 

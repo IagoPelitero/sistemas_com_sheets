@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Retention.gs
+ * Prisma Performance — Retention.gs
  * ------------------------------------------------------------
  * Registro e consulta de retenções.
  * Produtos e resultados válidos (ver RETENTION_PRODUCTS):

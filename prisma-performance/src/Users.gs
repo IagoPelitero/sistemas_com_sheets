@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Users.gs
+ * Prisma Performance — Users.gs
  * ------------------------------------------------------------
  * CRUD de usuários.
  *  - Edição completa via sistema (Nome, Email, Cargo, Equipe,
@@ -44,7 +44,7 @@ function usersCreate_(me, data) {
     cargo: data.cargo,
     equipe: String(data.equipe || '').trim(),
     status: data.status || 'Ativo',
-    tema: 'portobank',
+    tema: 'prisma',
     motor: isAdmin_(me) ? normalizeMotor_(data.motor) : '',
     criadoEm: nowIso_(),
     atualizadoEm: nowIso_()

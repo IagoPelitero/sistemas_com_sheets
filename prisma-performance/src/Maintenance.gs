@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Maintenance.gs
+ * Prisma Performance — Maintenance.gs
  * ------------------------------------------------------------
  * Rotação da aba Audit: a cada 30 dias, os registros antigos
  * são movidos para uma NOVA planilha de arquivo (nada é
@@ -58,7 +58,7 @@ function auditRotateNow_() {
     if (!old.length) return { linhas: 0, url: '', nome: '' };
 
     // 1) Grava PRIMEIRO no arquivo novo (garantia contra perda)
-    const nome = 'PortoBank Performance — Audit ' +
+    const nome = 'Prisma Performance — Audit ' +
       Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
     const arquivo = SpreadsheetApp.create(nome);
     const abaArq = arquivo.getSheets()[0].setName(SHEETS.AUDIT);
@@ -104,9 +104,10 @@ function auditRotateNow_() {
 /** Passos de migração — cada um roda UMA única vez, em ordem. */
 const MIGRATIONS_ = [
   { flag: 'migracao.retidoIncentivo.v1', run: function () { migrateRetidoIncentivo_(); } },
-  { flag: 'migracao.digitalDireto.v1', run: function () { migrateDigitalDireto_(); } }
+  { flag: 'migracao.digitalDireto.v1', run: function () { migrateDigitalDireto_(); } },
+  { flag: 'migracao.rebrandPrisma.v1', run: function () { migrateRebrandPrisma_(); } }
 ];
-const MIGRATION_CACHE_FLAG_ = 'migracao.verificada.v2';
+const MIGRATION_CACHE_FLAG_ = 'migracao.verificada.v3';
 
 /** Verificação barata (cache) + execução única das migrações. */
 function migrationEnsure_() {
@@ -196,6 +197,51 @@ function migrateDigitalDireto_() {
   if (removidas) {
     audit_('sistema', 'MIGRACAO', 'Cartão digital: pontos → valores diretos (' + removidas + ' chave(s) antiga(s) removida(s))');
   }
+}
+
+/**
+ * REBRANDING (v2.0.0): atualiza dados gravados com a identidade
+ * antiga para a atual — tema padrão dos usuários ('portobank' →
+ * 'prisma') e o nome do sistema na aba Settings. Registros de
+ * negócio (vendas, retenções, metas) não são tocados.
+ */
+function migrateRebrandPrisma_() {
+  // Tema dos usuários
+  let mudou = 0;
+  withLock_(function () {
+    const sheet = ensureSheet_(SHEETS.USERS);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+    const headers = headersOf_(sheet, SHEETS.USERS);
+    const cTema = headers.indexOf('tema') + 1;
+    if (!cTema) return;
+    const range = sheet.getRange(2, cTema, lastRow - 1, 1);
+    const temas = range.getValues();
+    for (let i = 0; i < temas.length; i++) {
+      if (String(temas[i][0]) === 'portobank') { temas[i][0] = 'prisma'; mudou++; }
+    }
+    if (mudou) range.setValues(temas);
+  });
+  if (mudou) cacheInvalidate_(SHEETS.USERS);
+
+  // Nome do sistema em Settings
+  const nomeRow = readAll_(SHEETS.SETTINGS).find(function (r) { return String(r.chave) === 'sistema.nome'; });
+  if (nomeRow && String(nomeRow.valor) !== 'Prisma Performance') {
+    withLock_(function () {
+      const sheet = ensureSheet_(SHEETS.SETTINGS);
+      const lastRow = sheet.getLastRow();
+      const keys = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+      for (let i = 0; i < keys.length; i++) {
+        if (String(keys[i][0]) === 'sistema.nome') {
+          sheet.getRange(i + 2, 2).setValue('Prisma Performance');
+          sheet.getRange(i + 2, 4).setValue(nowIso_());
+          break;
+        }
+      }
+    });
+    cacheInvalidate_(SHEETS.SETTINGS);
+  }
+  audit_('sistema', 'MIGRACAO', 'Rebranding: ' + mudou + ' tema(s) de usuário e nome do sistema atualizados para Prisma Performance');
 }
 
 /**

@@ -1,15 +1,15 @@
 <style>
 /* ============================================================
-   PortoBank Performance — Styles
+   Prisma Performance — Styles
    ------------------------------------------------------------
    Design system por variáveis CSS, baseado no layout de
    referência. Quatro temas trocáveis em tempo real via
-   [data-theme] no <body>: portobank · rosa · brasil · dark
+   [data-theme] no <body>: prisma · rosa · brasil · dark
    ============================================================ */
 
 /* ------------------------- Temas ------------------------- */
-:root, body[data-theme="portobank"] {
-  --primary: #00A1FC;          /* azul Porto */
+:root, body[data-theme="prisma"] {
+  --primary: #00A1FC;          /* azul primário */
   --primary-deep: #001E64;     /* navy institucional */
   --primary-soft: #E3F4FF;
   --bg: #F2F6FB;
@@ -91,6 +91,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 #splash h1 { font-size: 1.6rem; }
 #splash p  { opacity: .85; max-width: 420px; font-size: .9rem; }
+.splash-by { opacity: .6; font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
 .splash-logo {
   width: 72px; height: 72px; border-radius: 20px; display: grid; place-items: center;
   background: rgba(255,255,255,.15); font-family: 'Sora'; font-weight: 700; font-size: 1.6rem;
@@ -145,6 +146,8 @@ button { font-family: inherit; cursor: pointer; }
 .nav-item .ico { font-size: 20px; }
 
 .sidebar-footer { padding: 12px; border-top: 1px solid rgba(255,255,255,.12); }
+.made-by { display: block; margin-top: 8px; opacity: .45; font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; text-align: center; }
+#sidebar.collapsed .made-by { display: none; }
 .user-chip { display: flex; gap: 10px; align-items: center; }
 .avatar {
   min-width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
@@ -182,7 +185,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 .theme-dot:hover { transform: scale(1.15); }
 .theme-dot.active { outline: 2px solid var(--primary); outline-offset: 1px; }
-.theme-dot[data-t="portobank"] { background: linear-gradient(135deg,#001E64,#00A1FC); }
+.theme-dot[data-t="prisma"] { background: linear-gradient(135deg,#001E64,#00A1FC); }
 .theme-dot[data-t="rosa"]      { background: linear-gradient(135deg,#5C0A3C,#E91E8C); }
 .theme-dot[data-t="brasil"]    { background: linear-gradient(135deg,#009C3B,#FFDF00 60%,#002776); }
 .theme-dot[data-t="dark"]      { background: linear-gradient(135deg,#0B1220,#35B5FF); }

@@ -3,6 +3,13 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.0.0] — 2026-07-14 (rebranding)
+### Alterado
+- **Rebranding completo**: o produto passa a se chamar **Prisma Performance**, desenvolvido por **Pelitero Labs**. Título da aplicação, splash, marca da sidebar, rodapé, relatórios (prefixo `prisma_`), planilhas de arquivo de auditoria e toda a documentação atualizados.
+- Tema padrão renomeado para `prisma` (mesmas cores). **Compatível com dados existentes**: migração automática (`migracao.rebrandPrisma.v1`) atualiza o tema salvo dos usuários e o `sistema.nome` na aba Settings; linhas ainda não migradas caem no tema atual sem erro.
+- Pastas do repositório renomeadas preservando o histórico git: `prisma-performance/`, `modulo-legado-vendas/`, `modulo-legado-retencao/`.
+- Nenhuma regra de negócio, permissão, dashboard ou cálculo foi alterado nesta versão.
+
 ## [1.7.0] — 2026-07-12 (auditoria técnica)
 ### Corrigido
 - **Gestão da Equipe (ADMIN)**: agora há um seletor de equipes no topo — o ADMIN filtra os membros por equipe e o botão "Alterar meta da equipe" mira a equipe SELECIONADA (antes mirava sempre a equipe do próprio ADMIN, tornando impossível definir meta das equipes reais). Supervisor permanece restrito à própria equipe.
@@ -131,6 +138,6 @@ Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 - Relatórios exportáveis em CSV: Performance, Vendas, Retenção, Comissão, Equipe, Ranking, Metas.
 - Metas por usuário e por equipe (mensal).
 - Configurações completas via interface (ADMIN) — sem abrir o Sheets.
-- 4 temas (PortoBank, Rosa, Brasil, Dark) com preferência persistida por usuário.
+- 4 temas (Prisma, Rosa, Brasil, Dark) com preferência persistida por usuário.
 - Cache inteligente (CacheService com chunking + invalidação por aba) e LockService em toda escrita.
 - Auditoria de operações (aba Audit).

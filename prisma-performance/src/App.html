@@ -1,6 +1,6 @@
 <script>
 /* ============================================================
-   PortoBank Performance — App.html (JavaScript da SPA)
+   Prisma Performance — App.html (JavaScript da SPA)
    ------------------------------------------------------------
    - Uma única API (google.script.run → api(action, payload))
    - Cache de cliente por página+mês (atualizado após escrita)
@@ -35,7 +35,7 @@ const App = (function () {
     cadastro:      { title: 'Cadastro',         ico: 'person_add' },
     configuracoes: { title: 'Configurações',    ico: 'settings' }
   };
-  const THEMES_UI = ['portobank', 'rosa', 'brasil', 'dark'];
+  const THEMES_UI = ['prisma', 'rosa', 'brasil', 'dark'];
   const BRL = function (v) { return (v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); };
 
   // ------------------ API ------------------
@@ -115,7 +115,7 @@ const App = (function () {
   function boot() {
     api('session').then(function (s) {
       state.session = s;
-      applyTheme(s.user.tema || 'portobank', true);
+      applyTheme(s.user.tema || 'prisma', true);
       buildShell();
       document.getElementById('splash').classList.add('hidden');
       document.getElementById('app').classList.remove('hidden');

@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Commission.gs
+ * Prisma Performance — Commission.gs
  * ------------------------------------------------------------
  * Cálculo automático de comissões.
  *

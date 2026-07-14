@@ -1,6 +1,10 @@
-# PortoBank Performance
+# Prisma Performance
 
-Sistema corporativo de gestão de performance para a operação PortoBank: vendas, retenções, comissão automática, ranking, dashboards, metas, usuários e relatórios — 100% sobre Google Apps Script + Google Sheets, sem servidor externo.
+> Desenvolvido por **Pelitero Labs** — produto principal deste repositório.
+
+Sistema corporativo de gestão de performance operacional: vendas, retenções, comissão automática, ranking, dashboards, metas, usuários e relatórios — 100% sobre Google Apps Script + Google Sheets, sem servidor externo.
+
+**Tecnologias:** Google Apps Script · JavaScript (ES5/V8) · HTML5 · CSS3 · Google Sheets · CacheService · LockService · PropertiesService · Chart.js
 
 ---
 
@@ -191,7 +195,7 @@ O dashboard se atualiza sozinho a cada ~60s, com travas para nunca pesar no sist
 - **Circuit breaker:** respostas lentas (>5s) ou erros dobram o intervalo (60s → 120s → … → 8min) até estabilizar; jitter aleatório evita que todos os clientes disparem juntos.
 
 ### Rotação da auditoria (a cada 30 dias, sem perda)
-A aba `Audit` cresce continuamente; a rotação mantém a planilha principal leve **movendo** (nunca apagando) os registros com mais de 30 dias para uma **nova planilha de arquivo** ("PortoBank Performance — Audit AAAA-MM-DD"), criada no Drive de quem executa.
+A aba `Audit` cresce continuamente; a rotação mantém a planilha principal leve **movendo** (nunca apagando) os registros com mais de 30 dias para uma **nova planilha de arquivo** ("Prisma Performance — Audit AAAA-MM-DD"), criada no Drive de quem executa.
 - **Automática:** execute **uma única vez** `auditRotationInstall()` no editor do Apps Script (como dono do projeto) para criar o gatilho de 30 dias.
 - **Manual:** ADMIN → Configurações → card **Auditoria** → "Arquivar agora". O painel mostra quantos registros existem e o link do último arquivo gerado.
 - A gravação no arquivo acontece **antes** da limpeza da principal — sem risco de perda.

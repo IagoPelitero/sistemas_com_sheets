@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Code.gs
+ * Prisma Performance — Code.gs
  * ------------------------------------------------------------
  * Ponto de entrada do Web App (doGet) e helper de includes.
  *
@@ -18,7 +18,7 @@
 function doGet() {
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
-    .setTitle('PortoBank Performance')
+    .setTitle('Prisma Performance')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }

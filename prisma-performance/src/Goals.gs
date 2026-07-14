@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Goals.gs
+ * Prisma Performance — Goals.gs
  * ------------------------------------------------------------
  * Metas por usuário ou por equipe, por mês.
  * tipo: 'user' | 'team' — alvoId: userId ou nome da equipe.

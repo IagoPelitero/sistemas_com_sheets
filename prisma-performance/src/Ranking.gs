@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Ranking.gs
+ * Prisma Performance — Ranking.gs
  * ------------------------------------------------------------
  * TOP 10 com ordenação automática.
  * Supervisor: ranking da própria equipe (com nomes).

@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Config.gs
+ * Prisma Performance — Config.gs
  * ------------------------------------------------------------
  * Constantes globais, nomes de planilhas, cargos, permissões
  * e parâmetros padrão do sistema (seed).
@@ -200,8 +200,8 @@ const DEFAULT_SETTINGS = {
   'meta.padrao.retencaoCartao': '75',
   'meta.padrao.retencaoConta': '75',
   // ---- Sistema ----
-  'sistema.nome': 'PortoBank Performance',
-  'sistema.versao': '1.7.0'
+  'sistema.nome': 'Prisma Performance',
+  'sistema.versao': '2.0.0'
 };
 
 /**
@@ -227,7 +227,7 @@ const DEFAULT_PRODUCTS = [
 ];
 
 /** Temas disponíveis. */
-const THEMES = ['portobank', 'rosa', 'brasil', 'dark'];
+const THEMES = ['prisma', 'rosa', 'brasil', 'dark'];
 
 /** TTL do cache em segundos. */
 const CACHE_TTL = 300; // 5 minutos (invalidado automaticamente em toda escrita)

@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Reports.gs
+ * Prisma Performance — Reports.gs
  * ------------------------------------------------------------
  * Relatórios exportáveis (CSV) para Supervisor e ADMIN:
  * Performance, Vendas, Retenção, Comissão, Equipe, Ranking,
@@ -100,7 +100,7 @@ function reportGenerate_(me, tipo, monthKey) {
     }).join(';');
   }).join('\r\n');
 
-  return { filename: 'portobank_' + tipo.toLowerCase() + '_' + mk + '.csv', csv: '\ufeff' + csv };
+  return { filename: 'prisma_' + tipo.toLowerCase() + '_' + mk + '.csv', csv: '\ufeff' + csv };
 }
 
 // ---------------- Helpers ----------------

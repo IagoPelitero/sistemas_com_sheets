@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Auth.gs
+ * Prisma Performance — Auth.gs
  * ------------------------------------------------------------
  * Autenticação via conta Google (Session) + REGRA DO
  * PRIMEIRO LOGIN:
@@ -48,7 +48,7 @@ function getCurrentUser_() {
         cargo: ROLES.ADMIN,
         equipe: 'Administração',
         status: 'Ativo',
-        tema: 'portobank',
+        tema: 'prisma',
         motor: '',
         criadoEm: nowIso_(),
         atualizadoEm: nowIso_()

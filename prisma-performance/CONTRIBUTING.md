@@ -1,4 +1,4 @@
-# Contribuindo — PortoBank Performance
+# Contribuindo — Prisma Performance
 
 ## Estrutura de branches
 - `main` — produção. Somente merges de `release/*` ou hotfixes.

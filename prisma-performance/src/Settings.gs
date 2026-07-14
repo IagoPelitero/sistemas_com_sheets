@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Settings.gs
+ * Prisma Performance — Settings.gs
  * ------------------------------------------------------------
  * Configurações do sistema — SOMENTE ADMIN.
  * Tudo configurável via interface, sem abrir o Sheets:

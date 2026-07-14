@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Sales.gs
+ * Prisma Performance — Sales.gs
  * ------------------------------------------------------------
  * Registro e consulta de vendas de massificados.
  * Campos: Data, CPF, Produto (Massificado), Quantidade, OBS.

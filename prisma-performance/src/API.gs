@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — API.gs
+ * Prisma Performance — API.gs
  * ------------------------------------------------------------
  * ÚNICO ponto de entrada exposto ao cliente via
  * google.script.run. Toda chamada:
@@ -134,9 +134,12 @@ function api(action, payload) {
 
 /** Remove campos internos antes de enviar ao cliente. */
 function publicUser_(u) {
+  // 'portobank' é o nome ANTIGO do tema padrão (pré-rebranding);
+  // linhas ainda não migradas caem no tema atual sem quebrar nada
+  const tema = (!u.tema || u.tema === 'portobank') ? 'prisma' : u.tema;
   return {
     id: u.id, nome: u.nome, email: u.email, cargo: u.cargo,
-    equipe: u.equipe, status: u.status, tema: u.tema || 'portobank',
+    equipe: u.equipe, status: u.status, tema: tema,
     motor: String(u.motor || '')
   };
 }

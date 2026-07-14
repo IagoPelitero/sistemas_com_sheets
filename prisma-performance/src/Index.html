@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  PortoBank Performance — Index.html
+  Prisma Performance — Index.html
   SPA servida pelo HtmlService. Estrutura fixa; o conteúdo de
   cada página é renderizado por App.html conforme permissões.
   Layout baseado no design de referência (sidebar navy
@@ -10,9 +10,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="PortoBank Performance — Gestão de Vendas, Retenção e Comissionamento">
+  <meta name="description" content="Prisma Performance — Gestão de Vendas, Retenção e Comissionamento">
   <base target="_top">
-  <title>PortoBank Performance</title>
+  <title>Prisma Performance</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
@@ -20,14 +20,15 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <?!= include('Styles'); ?>
 </head>
-<body data-theme="portobank">
+<body data-theme="prisma">
 
   <!-- Tela de carregamento -->
   <div id="splash" role="status" aria-live="polite">
-    <div class="splash-logo" aria-hidden="true">PB</div>
-    <h1>PortoBank Performance</h1>
+    <div class="splash-logo" aria-hidden="true">PR</div>
+    <h1>Prisma Performance</h1>
     <p>Gestão de Vendas, Retenção e Comissionamento</p>
     <div class="loader" aria-label="Carregando"></div>
+    <small class="splash-by">Desenvolvido por Pelitero Labs</small>
   </div>
 
   <!-- Tela de acesso negado -->
@@ -45,9 +46,9 @@
     <!-- Menu lateral recolhível -->
     <aside id="sidebar" aria-label="Menu principal">
       <div class="brand">
-        <span class="brand-mark" aria-hidden="true">PB</span>
+        <span class="brand-mark" aria-hidden="true">PR</span>
         <span class="brand-name">
-          <strong>PortoBank</strong>
+          <strong>Prisma</strong>
           <small>Performance</small>
         </span>
         <button id="collapseBtn" class="icon-btn" aria-label="Recolher menu" title="Recolher menu">
@@ -66,6 +67,7 @@
             <small id="userExtra"></small>
           </span>
         </div>
+        <small class="made-by">Pelitero Labs</small>
       </footer>
     </aside>
 

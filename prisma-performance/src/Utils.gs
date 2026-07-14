@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Utils.gs
+ * Prisma Performance — Utils.gs
  * ------------------------------------------------------------
  * Funções utilitárias + camada de acesso a dados (DB).
  * TODO acesso à planilha passa por aqui — os demais módulos

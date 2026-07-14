@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PortoBank Performance — Import.gs
+ * Prisma Performance — Import.gs
  * ------------------------------------------------------------
  * Importação dos SISTEMAS ANTIGOS (SOMENTE ADMIN):
  *  - Vendas   → planilha antiga, aba "vendas_ativas"
