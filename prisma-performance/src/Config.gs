@@ -91,12 +91,14 @@ const PERMISSIONS = {
 const RETENTION_PRODUCTS = {
   'Cartão de Crédito': ['Retido por Incentivo', 'Retido por Argumentação', 'Cancelado'],
   'Conta Digital': ['Retido', 'Cancelado'],
-  'Cashback': ['Cashback', 'Milhas'],
-  'Massificado - Perda e Roubo': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
+  'Troca de Pontos': ['Cashback', 'Milhas'],
+  // SPPR (Perda e Roubo) NÃO possui mais retenção por Incentivo —
+  // somente Argumentação ou Cancelado (regra vigente do produto)
+  'Massificado - Perda e Roubo': ['Retido por Argumentação', 'Cancelado'],
   'Massificado - Identidade Protegida': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
-  'Massificado - Vida': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
+  'Massificado - Vida - Acidentes Pessoais Plus': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
   'Massificado - Martelinho': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado'],
-  'Massificado - RE': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado']
+  'Massificado - RE - Residencial Premiado': ['Retido por Argumentação', 'Retido por Incentivo', 'Cancelado']
 };
 
 /** Prefixo que identifica retenção de massificados. */
@@ -182,18 +184,19 @@ const DEFAULT_SETTINGS = {
   'comissao.massificados.faixasArg': JSON.stringify([15, 30, 50, 60]),
   'comissao.massificados.faixasInc': JSON.stringify([60, 65, 70, 75]),
   'comissao.massificados.arg': JSON.stringify({
-    'Perda e Roubo':        [1.50, 2.00, 2.50, 3.00],
-    'Identidade Protegida': [1.50, 2.00, 2.50, 3.00],
-    'Vida':                 [1.50, 2.00, 2.50, 3.00],
-    'Martelinho':           [1.00, 1.50, 2.00, 2.50],
-    'RE':                   [1.00, 1.50, 2.00, 2.50]
+    'Perda e Roubo':                  [1.50, 2.00, 2.50, 3.00],
+    'Identidade Protegida':           [1.50, 2.00, 2.50, 3.00],
+    'Vida - Acidentes Pessoais Plus': [1.50, 2.00, 2.50, 3.00],
+    'Martelinho':                     [1.00, 1.50, 2.00, 2.50],
+    'RE - Residencial Premiado':      [1.00, 1.50, 2.00, 2.50]
   }),
+  // SPPR (Perda e Roubo) fora da tabela de Incentivo: o produto não
+  // possui mais essa modalidade de retenção
   'comissao.massificados.inc': JSON.stringify({
-    'Perda e Roubo':        [1.00, 1.25, 1.50, 2.00],
-    'Identidade Protegida': [1.00, 1.25, 1.50, 2.00],
-    'Vida':                 [1.00, 1.25, 1.50, 2.00],
-    'RE':                   [1.00, 1.10, 1.25, 1.50],
-    'Martelinho':           [1.00, 1.10, 1.20, 1.30]
+    'Identidade Protegida':           [1.00, 1.25, 1.50, 2.00],
+    'Vida - Acidentes Pessoais Plus': [1.00, 1.25, 1.50, 2.00],
+    'RE - Residencial Premiado':      [1.00, 1.10, 1.25, 1.50],
+    'Martelinho':                     [1.00, 1.10, 1.20, 1.30]
   }),
   // ---- Metas padrão (vendas em QUANTIDADE; retenção em % POR PRODUTO) ----
   'meta.padrao.vendas': '50',
@@ -201,7 +204,7 @@ const DEFAULT_SETTINGS = {
   'meta.padrao.retencaoConta': '75',
   // ---- Sistema ----
   'sistema.nome': 'Prisma Performance',
-  'sistema.versao': '2.0.0'
+  'sistema.versao': '2.1.0'
 };
 
 /**

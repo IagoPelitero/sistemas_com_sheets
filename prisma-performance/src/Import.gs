@@ -35,10 +35,10 @@ const LEGACY_SOURCES_ = {
 const LEGACY_MASSIFICADO_MAP_ = {
   'sppr / bolsa protegida': 'Perda e Roubo',
   'identidade protegida': 'Identidade Protegida',
-  'seguro re': 'RE',
+  'seguro re': 'RE - Residencial Premiado',
   'martelinho de ouro': 'Martelinho',
-  'vida': 'Vida',
-  'seguro vida': 'Vida'
+  'vida': 'Vida - Acidentes Pessoais Plus',
+  'seguro vida': 'Vida - Acidentes Pessoais Plus'
 };
 
 /**
@@ -198,8 +198,8 @@ function legacyRetencaoMap_(tipo, sub, res) {
     return null;
   }
   if (tipo === 'Troca de Pontos') {
-    if (r.indexOf('cashback') !== -1) return { produto: 'Cashback', resultado: 'Cashback' };
-    if (r.indexOf('milhas') !== -1) return { produto: 'Cashback', resultado: 'Milhas' };
+    if (r.indexOf('cashback') !== -1) return { produto: 'Troca de Pontos', resultado: 'Cashback' };
+    if (r.indexOf('milhas') !== -1) return { produto: 'Troca de Pontos', resultado: 'Milhas' };
     return null;
   }
   if (tipo === 'Massificado') {

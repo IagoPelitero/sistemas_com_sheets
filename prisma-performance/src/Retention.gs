@@ -6,11 +6,12 @@
  * Produtos e resultados válidos (ver RETENTION_PRODUCTS):
  *   Cartão de Crédito     → Retido | Cancelado | Retido por Argumentação
  *   Conta Digital         → Retido | Cancelado
- *   Cashback              → Cashback | Milhas
+ *   Troca de Pontos       → Cashback | Milhas
  *   Massificado - <prod>  → Retido por Argumentação | Retido por
  *                           Incentivo | Cancelado
- *   (produtos: Perda e Roubo, Identidade Protegida, Vida,
- *    Martelinho, RE — conforme PDF 6.5)
+ *   (produtos: Perda e Roubo [SEM incentivo — só Argumentação/
+ *    Cancelado], Identidade Protegida, Vida - Acidentes Pessoais
+ *    Plus, Martelinho, RE - Residencial Premiado — PDF 6.5)
  * ============================================================
  */
 
@@ -118,7 +119,7 @@ function retentionStats_(rows) {
 
   const cc = byProduct['Cartão de Crédito'];
   const cd = byProduct['Conta Digital'];
-  const cb = byProduct['Cashback'];
+  const cb = byProduct['Troca de Pontos'];
 
   // Massificados: agrega todos os produtos "Massificado - *"
   const ms = { atendidos: 0, retidos: 0, argumentados: 0, incentivos: 0, cancelados: 0 };

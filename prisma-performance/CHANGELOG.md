@@ -3,6 +3,14 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.1.0] — 2026-07-23 (nomenclatura e regras de produto)
+### Alterado
+- **Produtos massificados renomeados**: `Vida` → **Vida - Acidentes Pessoais Plus** e `RE` → **RE - Residencial Premiado** (Perda e Roubo e Martelinho mantidos). Aplicado em formulários, estatísticas, tabelas de comissão, relatórios e documentação.
+- **Troca de Pontos**: o produto de retenção antes exibido como "Cashback" passa a se chamar **Troca de Pontos**, com os dois resultados de sempre (Cashback | Milhas). O prêmio por conversão em Cashback não muda.
+- **SPPR (Perda e Roubo) sem Incentivo**: os únicos resultados válidos passam a ser *Retido por Argumentação* e *Cancelado*. O formulário deixa de oferecer a opção, a validação do servidor rejeita o resultado e o produto sai da tabela de comissão por Incentivo. Demais produtos seguem inalterados.
+- **Migração automática** (`migracao.nomenclaturaProdutos.v1`): renomeia os registros já gravados na aba Retention (Cashback/Vida/RE) e as chaves das tabelas `comissao.massificados.arg/inc` em Settings **preservando valores editados pelo ADMIN**; remove Perda e Roubo da tabela de Incentivo. Registros históricos de SPPR por incentivo são preservados nas estatísticas (sem pagamento).
+- Importação dos sistemas antigos atualizada para os novos nomes.
+
 ## [2.0.0] — 2026-07-14 (rebranding)
 ### Alterado
 - **Rebranding completo**: o produto passa a se chamar **Prisma Performance**, desenvolvido por **Pelitero Labs**. Título da aplicação, splash, marca da sidebar, rodapé, relatórios (prefixo `prisma_`), planilhas de arquivo de auditoria e toda a documentação atualizados.

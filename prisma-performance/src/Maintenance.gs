@@ -105,9 +105,10 @@ function auditRotateNow_() {
 const MIGRATIONS_ = [
   { flag: 'migracao.retidoIncentivo.v1', run: function () { migrateRetidoIncentivo_(); } },
   { flag: 'migracao.digitalDireto.v1', run: function () { migrateDigitalDireto_(); } },
-  { flag: 'migracao.rebrandPrisma.v1', run: function () { migrateRebrandPrisma_(); } }
+  { flag: 'migracao.rebrandPrisma.v1', run: function () { migrateRebrandPrisma_(); } },
+  { flag: 'migracao.nomenclaturaProdutos.v1', run: function () { migrateNomenclaturaProdutos_(); } }
 ];
-const MIGRATION_CACHE_FLAG_ = 'migracao.verificada.v3';
+const MIGRATION_CACHE_FLAG_ = 'migracao.verificada.v4';
 
 /** Verificação barata (cache) + execução única das migrações. */
 function migrationEnsure_() {
@@ -242,6 +243,84 @@ function migrateRebrandPrisma_() {
     cacheInvalidate_(SHEETS.SETTINGS);
   }
   audit_('sistema', 'MIGRACAO', 'Rebranding: ' + mudou + ' tema(s) de usuário e nome do sistema atualizados para Prisma Performance');
+}
+
+/**
+ * NOMENCLATURA DE PRODUTOS (v2.1.0): renomeia nos DADOS gravados
+ * os produtos de retenção que mudaram de nome e ajusta as tabelas
+ * de comissão salvas em Settings:
+ *   Cashback           → Troca de Pontos
+ *   Massificado - Vida → Massificado - Vida - Acidentes Pessoais Plus
+ *   Massificado - RE   → Massificado - RE - Residencial Premiado
+ * Nas tabelas comissao.massificados.arg/inc as chaves 'Vida' e 'RE'
+ * são renomeadas PRESERVANDO os valores editados pelo ADMIN; a
+ * entrada 'Perda e Roubo' sai da tabela de Incentivo (SPPR não
+ * possui mais essa modalidade). Nada é apagado dos lançamentos.
+ */
+function migrateNomenclaturaProdutos_() {
+  const renameProduto = {
+    'Cashback': 'Troca de Pontos',
+    'Massificado - Vida': 'Massificado - Vida - Acidentes Pessoais Plus',
+    'Massificado - RE': 'Massificado - RE - Residencial Premiado'
+  };
+
+  // 1) Registros da aba Retention
+  let mudou = 0;
+  withLock_(function () {
+    const sheet = ensureSheet_(SHEETS.RETENTION);
+    const lastRow = sheet.getLastRow();
+    if (lastRow < 2) return;
+    const headers = headersOf_(sheet, SHEETS.RETENTION);
+    const cProd = headers.indexOf('produto') + 1;
+    if (!cProd) return;
+    const range = sheet.getRange(2, cProd, lastRow - 1, 1);
+    const prods = range.getValues();
+    for (let i = 0; i < prods.length; i++) {
+      const novo = renameProduto[String(prods[i][0])];
+      if (novo) { prods[i][0] = novo; mudou++; }
+    }
+    if (mudou) range.setValues(prods);
+  });
+  if (mudou) cacheInvalidate_(SHEETS.RETENTION);
+
+  // 2) Tabelas de comissão em Settings (preserva valores editados)
+  const renameChave = { 'Vida': 'Vida - Acidentes Pessoais Plus', 'RE': 'RE - Residencial Premiado' };
+  ['comissao.massificados.arg', 'comissao.massificados.inc'].forEach(function (key) {
+    const row = readAll_(SHEETS.SETTINGS).find(function (r) { return String(r.chave) === key; });
+    if (!row) return; // instalação nova: o seed já vem correto
+    let tab;
+    try { tab = JSON.parse(row.valor); } catch (e) { return; } // malformado: seed cobre via fallback
+    let alterou = false;
+    Object.keys(renameChave).forEach(function (antigo) {
+      if (tab[antigo] !== undefined && tab[renameChave[antigo]] === undefined) {
+        tab[renameChave[antigo]] = tab[antigo];
+        delete tab[antigo];
+        alterou = true;
+      }
+    });
+    if (key === 'comissao.massificados.inc' && tab['Perda e Roubo'] !== undefined) {
+      delete tab['Perda e Roubo']; // SPPR sem incentivo
+      alterou = true;
+    }
+    if (alterou) {
+      withLock_(function () {
+        const sheet = ensureSheet_(SHEETS.SETTINGS);
+        const lastRow = sheet.getLastRow();
+        const keys = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+        for (let i = 0; i < keys.length; i++) {
+          if (String(keys[i][0]) === key) {
+            sheet.getRange(i + 2, 2).setValue(JSON.stringify(tab));
+            sheet.getRange(i + 2, 4).setValue(nowIso_());
+            break;
+          }
+        }
+      });
+      cacheInvalidate_(SHEETS.SETTINGS);
+    }
+  });
+
+  audit_('sistema', 'MIGRACAO', 'Nomenclatura de produtos: ' + mudou +
+    ' registro(s) renomeado(s) (Troca de Pontos / Vida APP / RE Premiado); SPPR sem Incentivo nas tabelas');
 }
 
 /**

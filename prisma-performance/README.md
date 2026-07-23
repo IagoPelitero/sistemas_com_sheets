@@ -131,22 +131,29 @@ Bônus premium: 76%/42% → R$100 · 78%/44% → R$200 (prevalece o maior).
 Bônus adicional: 76% → +R$100 · 78% → +R$150.
 
 ### Retenção de Massificados (PDF 6.5) — R$/retido por faixa de conversão
+Produtos massificados de retenção: **Perda e Roubo (SPPR)**, **Identidade Protegida**, **Vida - Acidentes Pessoais Plus**, **Martelinho** e **RE - Residencial Premiado**.
+
 Por **Argumentação** (faixas 15/30/50/60%):
 
 | Produto | 15% | 30% | 50% | 60% |
 |---|---|---|---|---|
-| Perda e Roubo / Identidade Protegida / Vida | 1,50 | 2,00 | 2,50 | 3,00 |
-| Martelinho / RE | 1,00 | 1,50 | 2,00 | 2,50 |
+| Perda e Roubo / Identidade Protegida / Vida - Acidentes Pessoais Plus | 1,50 | 2,00 | 2,50 | 3,00 |
+| Martelinho / RE - Residencial Premiado | 1,00 | 1,50 | 2,00 | 2,50 |
 
 Por **Incentivo** (faixas 60/65/70/75%):
 
 | Produto | 60% | 65% | 70% | 75% |
 |---|---|---|---|---|
-| Perda e Roubo / Identidade Protegida / Vida | 1,00 | 1,25 | 1,50 | 2,00 |
-| RE | 1,00 | 1,10 | 1,25 | 1,50 |
+| Identidade Protegida / Vida - Acidentes Pessoais Plus | 1,00 | 1,25 | 1,50 | 2,00 |
+| RE - Residencial Premiado | 1,00 | 1,10 | 1,25 | 1,50 |
 | Martelinho | 1,00 | 1,10 | 1,20 | 1,30 |
 
+> **Regra do SPPR (Perda e Roubo):** o produto **não possui retenção por Incentivo** — os únicos resultados válidos são *Retido por Argumentação* e *Cancelado*. Por isso ele não aparece na tabela de Incentivo; registros históricos por incentivo são preservados nas estatísticas, mas não geram pagamento.
+
 A conversão é calculada **por produto e por tipo** (retidos ÷ casos do produto no mês). Abaixo da primeira faixa, sem pagamento. O formulário Nova Retenção registra o massificado específico e o tipo (Argumentação/Incentivo).
+
+### Troca de Pontos (Cashback/Milhas)
+O produto de retenção antes exibido como "Cashback" chama-se **Troca de Pontos**, com dois resultados possíveis: **Cashback** ou **Milhas**. O prêmio continua pago pela conversão em Cashback (PDF 6.3.2: 36%→50 · 39%→70 · 42%→100 · 45%→130).
 
 ## 7. Instalação
 
@@ -214,7 +221,7 @@ ADMIN → Configurações → card **"Importar sistemas antigos"**: cole o link 
 
 - **Validação antes de gravar**: data, e-mail (precisa existir na aba `Users`) e produto/resultado são conferidos; linhas inválidas são puladas e contadas por motivo no resumo final.
 - **Idempotente**: cada registro importado recebe a etiqueta `[import:<arquivo>:<linha>]` no campo obs — reimportar a mesma planilha reconhece e pula o que já entrou (zero duplicatas).
-- **Vocabulário traduzido automaticamente** (retenção): `Troca de Pontos` → `Cashback`; massificados antigos → produtos atuais (`SPPR / Bolsa Protegida` → Perda e Roubo, `Seguro RE` → RE, `Martelinho de Ouro` → Martelinho etc.); resultados `Retido`/`Troca`/`Argumentação` → nomenclatura atual. Massificados sem correspondente (ex.: Adicional, Quitação fatura) são pulados e informados.
+- **Vocabulário traduzido automaticamente** (retenção): `Troca de Pontos` mantém o nome (resultados Cashback/Milhas); massificados antigos → produtos atuais (`SPPR / Bolsa Protegida` → Perda e Roubo, `Seguro RE` → RE - Residencial Premiado, `Vida` → Vida - Acidentes Pessoais Plus, `Martelinho de Ouro` → Martelinho etc.); resultados `Retido`/`Troca`/`Argumentação` → nomenclatura atual. Massificados sem correspondente (ex.: Adicional, Quitação fatura) são pulados e informados.
 - **Gravação em lote**: uma única trava e uma única escrita — milhares de linhas sem pesar no Sheets.
 - **Recálculo automático**: dashboards, ranking, metas e comissões passam a considerar o histórico importado imediatamente (nada derivado é gravado).
 - **Reutilizável**: novas origens são só uma entrada a mais no mapa `LEGACY_SOURCES_` (Import.gs).
