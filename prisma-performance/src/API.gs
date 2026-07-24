@@ -53,12 +53,20 @@ function api(action, payload) {
       // ---- Lançamentos ----
       case 'sales.create': data = salesCreate_(me, payload); break;
       case 'retention.create': data = retentionCreate_(me, payload); break;
-      // Últimos lançamentos (próprios + escopo do gestor) e exclusão
-      // com autonomia do atendente — regras em entryDelete_ (Utils.gs)
+      // Últimos lançamentos (próprios + escopo do gestor), edição e
+      // exclusão com autonomia do atendente — regras compartilhadas
+      // em entryAssertCanMutate_ (Utils.gs)
       case 'sales.recent': data = salesRecent_(me); break;
+      case 'sales.get': data = salesGetForEdit_(me, payload.id); break;
+      case 'sales.update': data = salesUpdate_(me, payload.id, payload); break;
       case 'sales.delete': data = salesDelete_(me, payload.id); break;
       case 'retention.recent': data = retentionRecent_(me); break;
+      case 'retention.get': data = retentionGetForEdit_(me, payload.id); break;
+      case 'retention.update': data = retentionUpdate_(me, payload.id, payload); break;
       case 'retention.delete': data = retentionDelete_(me, payload.id); break;
+
+      // ---- Simulador de comissão (somente leitura; nada é gravado) ----
+      case 'commission.simulate': data = commissionSimulate_(me, payload); break;
 
       // ---- Usuários ----
       case 'users.list':

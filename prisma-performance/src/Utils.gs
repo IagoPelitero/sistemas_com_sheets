@@ -259,13 +259,36 @@ function teamRecentEntries_(sheetName, me, limit) {
 }
 
 /**
- * Exclui um lançamento (venda/retenção) com regra de autonomia:
+ * Autoriza uma MUTAÇÃO (edição ou exclusão) de um lançamento
+ * conforme a autonomia — regra ÚNICA compartilhada por excluir e
+ * editar, para que ambos se comportem de forma idêntica:
  *  - Dono: somente entre os próprios ENTRY_DELETE_LIMIT mais recentes;
  *  - Supervisor: qualquer lançamento da própria equipe;
  *  - ADMIN: qualquer lançamento.
- * A exclusão é definitiva (deleteRow) e todos os indicadores e
- * comissões são recalculados na próxima leitura — nada derivado
- * fica gravado na planilha.
+ * @param {string} sheetName
+ * @param {Object} me
+ * @param {Object} row Linha alvo (já lida).
+ * @param {string} acao Verbo para a mensagem ('excluir' | 'editar').
+ * @throws {Error} se não autorizado.
+ */
+function entryAssertCanMutate_(sheetName, me, row, acao) {
+  const own = String(row.userId) === String(me.id);
+  if (own) {
+    const recente = ownRecentEntries_(sheetName, me, ENTRY_DELETE_LIMIT)
+      .some(function (r) { return String(r.id) === String(row.id); });
+    if (!recente) {
+      throw new Error('Você só pode ' + acao + ' os seus ' + ENTRY_DELETE_LIMIT + ' lançamentos mais recentes.');
+    }
+  } else if (!isAdmin_(me) && !(isSupervisor_(me) && String(row.equipe) === String(me.equipe))) {
+    throw new Error('Sem permissão para ' + acao + ' este lançamento.');
+  }
+}
+
+/**
+ * Exclui um lançamento (venda/retenção) — autonomia em
+ * entryAssertCanMutate_. Definitiva (deleteRow); indicadores e
+ * comissões são recalculados na próxima leitura (nada derivado
+ * fica gravado na planilha).
  * @param {string} sheetName
  * @param {Object} me
  * @param {string} id
@@ -274,16 +297,7 @@ function teamRecentEntries_(sheetName, me, limit) {
 function entryDelete_(sheetName, me, id) {
   const row = readAll_(sheetName).find(function (r) { return String(r.id) === String(id); });
   if (!row) throw new Error('Registro não encontrado.');
-  const own = String(row.userId) === String(me.id);
-  if (own) {
-    const recente = ownRecentEntries_(sheetName, me, ENTRY_DELETE_LIMIT)
-      .some(function (r) { return String(r.id) === String(id); });
-    if (!recente) {
-      throw new Error('Você só pode excluir os seus ' + ENTRY_DELETE_LIMIT + ' lançamentos mais recentes.');
-    }
-  } else if (!isAdmin_(me) && !(isSupervisor_(me) && String(row.equipe) === String(me.equipe))) {
-    throw new Error('Sem permissão para excluir este lançamento.');
-  }
+  entryAssertCanMutate_(sheetName, me, row, 'excluir');
   if (!deleteRowById_(sheetName, id)) throw new Error('Falha ao excluir o registro.');
   return row;
 }

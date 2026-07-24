@@ -251,8 +251,8 @@ function commissionMassificados_(rows) {
 
 /**
  * Comissão total de um usuário no mês (vendas + retenção).
- * Teto do PDF 6.4 (R$530) aplicado somente ao Cartão de Crédito
- * do motor DIGITAL (argumentação + incentivo).
+ * Busca os registros reais do mês e delega o cálculo ao núcleo
+ * compartilhado commissionCompute_.
  * @param {Object} user
  * @param {string=} monthKey
  * @return {Object} composição completa da comissão
@@ -261,11 +261,31 @@ function commissionForUser_(user, monthKey) {
   const mk = sanitizeMonthKey_(monthKey);
   const sales = salesQuery_(user, 'self', mk);
   const rets = retentionQuery_(user, 'self', mk);
+  const goal = goalForUser_(user, mk);
+  return commissionCompute_(user, sales, rets, goal, mk);
+}
+
+/**
+ * NÚCLEO do cálculo da comissão a partir de conjuntos JÁ obtidos de
+ * vendas e retenções — fonte ÚNICA da fórmula, usada tanto pela
+ * comissão real (commissionForUser_) quanto pela simulação
+ * (commissionSimulate_). Não lê a planilha: recebe os registros
+ * prontos, então é O(1) e reutilizável.
+ *
+ * Teto do PDF 6.4 (R$530) aplicado somente ao Cartão de Crédito do
+ * motor DIGITAL (argumentação + incentivo).
+ * @param {Object} user
+ * @param {Object[]} sales Vendas (reais e/ou hipotéticas).
+ * @param {Object[]} rets Retenções (reais e/ou hipotéticas).
+ * @param {Object} goal {metaVendas, ...} meta vigente do usuário.
+ * @param {string} mk Mês 'yyyy-MM'.
+ * @return {Object} composição completa da comissão
+ */
+function commissionCompute_(user, sales, rets, goal, mk) {
   const stats = retentionStats_(rets);
 
   // Atingimento INDIVIDUAL: vendas do próprio usuário ÷ meta
   // individual (ADMIN/supervisor definem em Gestão da Equipe)
-  const goal = goalForUser_(user, mk);
   const totalQtd = sales.reduce(function (a, x) { return a + (parseInt(x.quantidade, 10) || 1); }, 0);
   const atingimento = pct_(totalQtd, goal.metaVendas);
 
@@ -329,6 +349,60 @@ function commissionForUser_(user, monthKey) {
     tetoRetencaoAplicado: tetoAplicado,
     totalVendas: vendas.total,
     totalRetencao: totalRetencao,
-    total: total
+    total: total,
+    // Extras para a UI de composição/simulação (ignorados por quem
+    // já consumia o objeto — retrocompatível):
+    metaVendas: goal.metaVendas,
+    totalQtdVendas: totalQtd
   };
+}
+
+/**
+ * SIMULAÇÃO "e se…": recalcula a comissão do usuário somando
+ * lançamentos HIPOTÉTICOS aos reais do mês. NADA é gravado — apenas
+ * leitura cacheada (O(1)) e cálculo em memória pelo mesmo núcleo da
+ * comissão real, garantindo que o valor simulado seguirá as mesmas
+ * regras do valor pago.
+ * @param {Object} me Usuário autenticado (simula a PRÓPRIA comissão).
+ * @param {Object} payload {mes?, vendas:[{produto,quantidade}],
+ *                          retencoes:[{produto,resultado,quantidade}]}
+ * @return {Object} {atual, simulada, deltaTotal}
+ */
+function commissionSimulate_(me, payload) {
+  const mk = sanitizeMonthKey_(payload.mes);
+  const salesReais = salesQuery_(me, 'self', mk);
+  const retsReais = retentionQuery_(me, 'self', mk);
+  const goal = goalForUser_(me, mk);
+
+  const atual = commissionCompute_(me, salesReais, retsReais, goal, mk);
+
+  // Produtos ativos válidos para a simulação (não inventar produto)
+  const ativos = {};
+  readAll_(SHEETS.PRODUCTS).forEach(function (p) {
+    if (String(p.ativo) !== 'Não') ativos[String(p.nome)] = true;
+  });
+
+  const salesSim = salesReais.slice();
+  (payload.vendas || []).forEach(function (v) {
+    const qtd = parseInt(v.quantidade, 10) || 0;
+    if (qtd < 1) return;
+    if (!ativos[String(v.produto)]) throw new Error('Produto de venda inválido na simulação: ' + v.produto);
+    salesSim.push({ produto: String(v.produto), quantidade: qtd, userId: me.id, equipe: me.equipe, data: mk + '-01' });
+  });
+
+  const retsSim = retsReais.slice();
+  (payload.retencoes || []).forEach(function (r) {
+    const qtd = parseInt(r.quantidade, 10) || 0;
+    if (qtd < 1) return;
+    const results = RETENTION_PRODUCTS[r.produto];
+    if (!results || results.indexOf(r.resultado) === -1) {
+      throw new Error('Retenção inválida na simulação: ' + r.produto + ' / ' + r.resultado);
+    }
+    for (let i = 0; i < qtd; i++) {
+      retsSim.push({ produto: r.produto, resultado: r.resultado, userId: me.id, equipe: me.equipe, data: mk + '-01' });
+    }
+  });
+
+  const simulada = commissionCompute_(me, salesSim, retsSim, goal, mk);
+  return { atual: atual, simulada: simulada, deltaTotal: round2_(simulada.total - atual.total) };
 }

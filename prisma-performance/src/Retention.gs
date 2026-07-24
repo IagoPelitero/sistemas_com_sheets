@@ -80,6 +80,57 @@ function retentionDelete_(me, id) {
 }
 
 /**
+ * Devolve os campos EDITÁVEIS (crus) de uma retenção, após
+ * autorizar a mutação (CPF completo só para quem pode editar).
+ * @param {Object} me
+ * @param {string} id
+ * @return {Object} {id, data(yyyy-MM-dd), cpf, produto, resultado, obs}
+ */
+function retentionGetForEdit_(me, id) {
+  const row = readAll_(SHEETS.RETENTION).find(function (r) { return String(r.id) === String(id); });
+  if (!row) throw new Error('Retenção não encontrada.');
+  entryAssertCanMutate_(SHEETS.RETENTION, me, row, 'editar');
+  return {
+    id: row.id, data: toDateKey_(row.data), cpf: String(row.cpf).replace(/\D/g, ''),
+    produto: row.produto, resultado: row.resultado, obs: row.obs || ''
+  };
+}
+
+/**
+ * Edita uma retenção existente. Reaproveita EXATAMENTE a validação
+ * do cadastro (produto/resultado válidos, inclusive a regra do SPPR
+ * sem Incentivo) e a autonomia do excluir. id/userId/equipe/criadoEm
+ * preservados; a comissão recalcula sozinha.
+ * @param {Object} me
+ * @param {string} id
+ * @param {Object} data {data, cpf, produto, resultado, obs}
+ */
+function retentionUpdate_(me, id, data) {
+  const row = readAll_(SHEETS.RETENTION).find(function (r) { return String(r.id) === String(id); });
+  if (!row) throw new Error('Retenção não encontrada.');
+  entryAssertCanMutate_(SHEETS.RETENTION, me, row, 'editar');
+
+  if (!data.data) throw new Error('Data é obrigatória.');
+  if (!isValidCpf_(data.cpf)) throw new Error('CPF inválido (11 dígitos).');
+  const results = RETENTION_PRODUCTS[data.produto];
+  if (!results) throw new Error('Produto de retenção inválido.');
+  if (results.indexOf(data.resultado) === -1) {
+    throw new Error('Resultado "' + data.resultado + '" não é válido para ' + data.produto + '.');
+  }
+
+  const patch = {
+    data: toDateKey_(data.data),
+    cpf: String(data.cpf).replace(/\D/g, ''),
+    produto: data.produto,
+    resultado: data.resultado,
+    obs: String(data.obs || '').trim()
+  };
+  if (!updateRowById_(SHEETS.RETENTION, id, patch)) throw new Error('Falha ao atualizar a retenção.');
+  audit_(me.email, 'RETENTION_UPDATE', patch.produto + ' → ' + patch.resultado + ' de ' + toDateBR_(patch.data));
+  return true;
+}
+
+/**
  * Retenções do mês por escopo.
  * @param {Object} me
  * @param {string} scope 'self' | 'team' | 'all'
