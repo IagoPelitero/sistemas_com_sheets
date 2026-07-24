@@ -3,6 +3,19 @@
 Formato baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/).
 Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.2.0] — 2026-07-24 (autonomia e transparência para todos os perfis)
+### Adicionado
+- **Modal "Minha Comissão"** (botão 🔎 no card de comissão do dashboard, para TODOS os perfis): mostra a **composição do saldo do mês** por modalidade (Cartão · Conta Digital · Troca de Pontos · Massificados · Vendas) + total, com aviso de teto quando aplicável. Antes essa quebra só era visível ao gestor.
+- **Simulador de comissão "e se…"** dentro do mesmo modal: o operador projeta o impacto de novos lançamentos hipotéticos (vendas e/ou retenções) e vê a comissão resultante e o delta. **Nada é gravado** — recálculo em memória pelo mesmo núcleo da comissão real (leituras O(1) via cache). Nova rota `commission.simulate`.
+- **Edição dos próprios lançamentos** (✏️ na lista "Meus últimos lançamentos", vendas e retenções): o operador corrige um lançamento em vez de excluir e recriar. Segue **exatamente** as regras do excluir (dono edita os 5 mais recentes; supervisor edita da própria equipe; ADMIN edita qualquer um) e revalida como no cadastro (produto ativo, resultado válido por produto — inclusive a regra do SPPR sem Incentivo, CPF, quantidade). Novas rotas `sales.get`/`sales.update` e `retention.get`/`retention.update`, auditadas (`SALE_UPDATE`/`RETENTION_UPDATE`).
+
+### Alterado
+- **Refactor interno seguro (DRY):** o núcleo do cálculo foi extraído em `commissionCompute_(user, sales, rets, goal, mk)`, agora fonte única usada pela comissão real (`commissionForUser_`) e pela simulação — comportamento do cálculo **idêntico** (validado por testes de regressão). A autorização de mutação de lançamentos foi unificada em `entryAssertCanMutate_`, compartilhada por excluir e editar.
+- `commissionForUser_` passou a expor `metaVendas` e `totalQtdVendas` (campos extras, retrocompatíveis).
+
+### Notas
+- Sem mudança na estrutura do Google Sheets. Nenhuma regra de comissão, permissão ou dashboard existente foi alterada. Performance preservada (simulação é cálculo puro; edição é 1 update com lock).
+
 ## [2.1.0] — 2026-07-23 (nomenclatura e regras de produto)
 ### Alterado
 - **Produtos massificados renomeados**: `Vida` → **Vida - Acidentes Pessoais Plus** e `RE` → **RE - Residencial Premiado** (Perda e Roubo e Martelinho mantidos). Aplicado em formulários, estatísticas, tabelas de comissão, relatórios e documentação.

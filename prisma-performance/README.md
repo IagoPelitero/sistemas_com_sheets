@@ -111,6 +111,8 @@ Indicadores de valor fixo: **CPCP R$30** (pago só com proposta formalizada apó
 ### Composição da comissão (TODOS os perfis)
 A comissão total soma automaticamente **Cartão + Conta Digital + Cashback + Vendas + Retenção de Massificados** — no card do dashboard e em todos os relatórios. O que muda por perfil é apenas a **regra do Cartão**:
 
+> **Modal "Minha Comissão" (🔎 no dashboard):** qualquer usuário abre a **composição do saldo do mês** por modalidade (quanto veio de cada bloco) e um **Simulador "e se…"** — projeta o impacto de novos lançamentos hipotéticos na própria comissão. A simulação é só cálculo em memória (rota `commission.simulate`), **nada é gravado**, e usa o mesmo núcleo (`commissionCompute_`) da comissão paga, garantindo fidelidade ao valor real.
+
 ### Cartão de Crédito — DIGITAL (PDF 6.3.2)
 - Valores financeiros **DIRETOS**, sem conversão por pontos:
   - Retenção por **Argumentação** = **R$1,50**/retida (`comissao.cartaoDigital.valorArgumentacao`).
@@ -262,7 +264,8 @@ Todo registro recebe um id hexadecimal de 24 caracteres: **12 dígitos de timest
 - **Configurações JSON validadas antes de salvar** — um JSON malformado não zera regras de comissão silenciosamente.
 - **CSV protegido contra fórmulas** (células iniciadas em `=`, `+`, `-`, `@` são neutralizadas ao abrir no Excel/Sheets).
 - CPF mascarado na exibição e nos relatórios (LGPD).
-- Auditoria de todas as operações relevantes (aba `Audit`): quem, quando e o quê — inclui alterações de metas (`GOAL_SET`), de comissões (`SETTING_UPDATE`) e exclusões.
+- Auditoria de todas as operações relevantes (aba `Audit`): quem, quando e o quê — inclui alterações de metas (`GOAL_SET`), de comissões (`SETTING_UPDATE`), edições (`SALE_UPDATE`/`RETENTION_UPDATE`) e exclusões.
+- **Autonomia de correção**: o operador **edita** (✏️) ou **exclui** (🗑) os próprios 5 lançamentos mais recentes; supervisor age no escopo da equipe; ADMIN em qualquer um. Edição e exclusão compartilham a mesma autorização (`entryAssertCanMutate_`) e a edição revalida como o cadastro.
 - Confirmação antes de toda exclusão definitiva (usuário, produto, equipe, lançamento).
 - Zero duplicação: camada de dados única em `Utils.gs`.
 
