@@ -204,7 +204,7 @@ const DEFAULT_SETTINGS = {
   'meta.padrao.retencaoConta': '75',
   // ---- Sistema ----
   'sistema.nome': 'Prisma Performance',
-  'sistema.versao': '2.1.0'
+  'sistema.versao': '2.2.0'
 };
 
 /**

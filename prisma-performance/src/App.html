@@ -333,6 +333,7 @@ const App = (function () {
           html += kpi('Progresso da meta', d.cards.progressoVendas + '%', progressBar(d.cards.progressoVendas),
             d.cards.progressoVendas >= 100 ? 'ok' : d.cards.progressoVendas >= 60 ? '' : 'warn');
           html += '</div>';
+          html += '<div style="margin-top:12px"><button class="btn small ghost" onclick="App.commissionModal()">🔎 Composição &amp; Simulador</button></div>';
         } else {
           // Perfis com retenção: vendas em quantidade + %s de
           // retenção POR PRODUTO (cada uma contra a própria meta),
@@ -358,7 +359,8 @@ const App = (function () {
             '<span class="muted">Vendas ' + BRL(d.comissao.totalVendas) + ' · Retenção ' + BRL(d.comissao.totalRetencao) + '</span></div>' +
             '<div class="kpi-value" style="margin-top:6px">' + BRL(d.comissao.total) + '</div>' +
             '<p class="muted" style="margin-top:8px">Meta de vendas: ' + d.cards.progressoVendas + '% atingido</p>' +
-            progressBar(d.cards.progressoVendas) + '</div>';
+            progressBar(d.cards.progressoVendas) +
+            '<div style="margin-top:12px"><button class="btn small ghost" onclick="App.commissionModal()">🔎 Composição &amp; Simulador</button></div></div>';
         }
 
         // Gráfico de evolução diária
@@ -747,24 +749,80 @@ const App = (function () {
   function recentHtml(d, kind) {
     const isVenda = kind === 'sales';
     const limite = state.session.entryDeleteLimit || 5;
-    const delBtn = function (x) {
-      return '<button class="btn small danger" title="Excluir lançamento" onclick="App.entryDelete(\'' + kind + '\',\'' + x.id + '\')">🗑</button>';
+    const acoes = function (x) {
+      return '<button class="btn small ghost" title="Editar lançamento" onclick="App.entryEdit(\'' + kind + '\',\'' + x.id + '\')">✏️</button> ' +
+        '<button class="btn small danger" title="Excluir lançamento" onclick="App.entryDelete(\'' + kind + '\',\'' + x.id + '\')">🗑</button>';
     };
     let html = '<div class="card" style="max-width:640px;margin-top:16px"><h3>Meus últimos lançamentos</h3>' +
-      '<p class="muted" style="margin-bottom:8px">Errou algo? Você pode excluir seus ' + limite + ' lançamentos mais recentes. A exclusão é definitiva e recalcula os indicadores na hora.</p>' +
+      '<p class="muted" style="margin-bottom:8px">Errou algo? Você pode <strong>editar</strong> ou <strong>excluir</strong> seus ' + limite + ' lançamentos mais recentes — indicadores e comissão recalculam na hora.</p>' +
       table(['Data', 'CPF', 'Produto', isVenda ? 'Qtd' : 'Resultado', ''], d.meus.map(function (x) {
         return '<tr><td>' + esc(x.data) + '</td><td>' + esc(x.cpf) + '</td><td>' + esc(x.produto) + '</td>' +
-          '<td>' + (isVenda ? x.quantidade : esc(x.resultado)) + '</td><td>' + delBtn(x) + '</td></tr>';
+          '<td>' + (isVenda ? x.quantidade : esc(x.resultado)) + '</td><td style="white-space:nowrap">' + acoes(x) + '</td></tr>';
       }), 'Nenhum lançamento seu ainda.') + '</div>';
     if (d.equipe) {
       html += '<div class="card" style="max-width:640px;margin-top:16px"><h3>Últimos da equipe</h3>' +
-        '<p class="muted" style="margin-bottom:8px">Como gestor, você pode excluir lançamentos do seu escopo.</p>' +
+        '<p class="muted" style="margin-bottom:8px">Como gestor, você pode editar ou excluir lançamentos do seu escopo.</p>' +
         table(['Data', 'Atendente', 'Produto', isVenda ? 'Qtd' : 'Resultado', ''], d.equipe.map(function (x) {
           return '<tr><td>' + esc(x.data) + '</td><td>' + esc(x.atendente) + '</td><td>' + esc(x.produto) + '</td>' +
-            '<td>' + (isVenda ? x.quantidade : esc(x.resultado)) + '</td><td>' + delBtn(x) + '</td></tr>';
+            '<td>' + (isVenda ? x.quantidade : esc(x.resultado)) + '</td><td style="white-space:nowrap">' + acoes(x) + '</td></tr>';
         }), 'Sem lançamentos no seu escopo.') + '</div>';
     }
     return html;
+  }
+
+  /** Edita um lançamento próprio/da equipe: busca os campos crus,
+   *  abre o formulário preenchido e salva reaproveitando a validação
+   *  do servidor (as mesmas regras do cadastro). */
+  function entryEdit(kind, id) {
+    const isVenda = kind === 'sales';
+    api(kind + '.get', { id: id }).then(function (r) {
+      let campoValor;
+      if (isVenda) {
+        const prods = state.session.products.filter(function (p) { return String(p.ativo) !== 'Não'; });
+        campoValor =
+          '<div><label>Produto *</label><select name="produto" required>' +
+          prods.map(function (p) { return '<option' + (p.nome === r.produto ? ' selected' : '') + '>' + esc(p.nome) + '</option>'; }).join('') + '</select></div>' +
+          '<div><label>Quantidade *</label><input type="number" name="quantidade" min="1" value="' + esc(r.quantidade) + '" required></div>';
+      } else {
+        const rp = state.session.retentionProducts;
+        campoValor =
+          '<div><label>Produto *</label><select name="produto" id="edRetProd" required>' +
+          Object.keys(rp).map(function (p) { return '<option' + (p === r.produto ? ' selected' : '') + '>' + esc(p) + '</option>'; }).join('') + '</select></div>' +
+          '<div><label>Resultado *</label><select name="resultado" id="edRetRes" required></select></div>';
+      }
+      openModal(isVenda ? 'Editar venda' : 'Editar retenção',
+        '<form id="fEdit"><div class="form-grid">' +
+        '<div><label>Data *</label><input type="date" name="data" required value="' + esc(r.data) + '"></div>' +
+        '<div><label>CPF *</label><input name="cpf" required inputmode="numeric" maxlength="14" value="' + esc(r.cpf) + '"></div>' +
+        campoValor +
+        '<div class="full"><label>Observação (opcional)</label><textarea name="obs" rows="2">' + esc(r.obs || '') + '</textarea></div>' +
+        '</div><div class="form-actions"><button class="btn ghost" type="button" onclick="App.closeModal()">Cancelar</button>' +
+        '<button class="btn" type="submit">Salvar alterações</button></div></form>');
+
+      if (!isVenda) {
+        const prodSel = document.getElementById('edRetProd');
+        const resSel = document.getElementById('edRetRes');
+        const rp = state.session.retentionProducts;
+        const fill = function (selecionado) {
+          resSel.innerHTML = rp[prodSel.value].map(function (x) {
+            return '<option' + (x === selecionado ? ' selected' : '') + '>' + esc(x) + '</option>';
+          }).join('');
+        };
+        prodSel.addEventListener('change', function () { fill(null); });
+        fill(r.resultado);
+      }
+
+      document.getElementById('fEdit').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        const btn = ev.target.querySelector('button[type=submit]');
+        const payload = { id: id };
+        new FormData(ev.target).forEach(function (v, k) { payload[k] = v; });
+        if (payload.cpf) payload.cpf = payload.cpf.replace(/\D/g, '');
+        lockWhile(btn, api(kind + '.update', payload).then(function () {
+          toast('Lançamento atualizado!'); closeModal(); invalidate(); loadRecent(kind);
+        }).catch(function (e) { toast(e.message, true); }));
+      });
+    }).catch(function (e) { toast(e.message, true); });
   }
 
   /** Exclui um lançamento (venda/retenção), com confirmação. */
@@ -784,6 +842,90 @@ const App = (function () {
   function rankingPeriodo(p) {
     state.rankingPeriodo = p;
     go('ranking');
+  }
+
+  // ------------------ Minha Comissão (composição + simulador) ------------------
+
+  /** Abre o modal com a composição do saldo do mês e o simulador.
+   *  A composição vem do dashboard já carregado (sem chamada extra);
+   *  o simulador usa a rota commission.simulate (nada é gravado). */
+  function commissionModal() {
+    cached('dashboard', { mes: state.month }).then(function (d) {
+      renderCommissionModal(d.comissao);
+    }).catch(function (e) { toast(e.message, true); });
+  }
+
+  /** Linhas da composição por modalidade + total (reutilizado no
+   *  saldo atual e no resultado simulado). */
+  function comissaoLinhas(c) {
+    const linhas = [
+      ['Cartão de Crédito', c.cartao.total],
+      ['Conta Digital', c.contaDigital.total],
+      ['Troca de Pontos (Cashback)', c.cashback.premio],
+      ['Retenção de Massificados', c.massificados.total],
+      ['Vendas', c.vendas.total]
+    ];
+    return linhas.map(function (l) {
+      return '<tr><td>' + l[0] + '</td><td style="text-align:right"><strong>' + BRL(l[1]) + '</strong></td></tr>';
+    }).join('') +
+      '<tr><td><strong>Total do mês</strong></td><td style="text-align:right"><strong>' + BRL(c.total) + '</strong></td></tr>';
+  }
+
+  function renderCommissionModal(atual) {
+    const prods = state.session.products.filter(function (p) { return String(p.ativo) !== 'Não'; });
+    const rp = state.session.retentionProducts;
+    const hasRet = state.session.permissions.pages.indexOf('novaRetencao') !== -1;
+
+    let sim =
+      '<div class="form-grid">' +
+      '<div><label>Simular + vendas de</label><select id="simVProd">' +
+      prods.map(function (p) { return '<option>' + esc(p.nome) + '</option>'; }).join('') + '</select></div>' +
+      '<div><label>Qtd. de vendas</label><input type="number" id="simVQtd" min="0" value="0"></div>';
+    if (hasRet) {
+      sim +=
+        '<div><label>Simular + retenções de</label><select id="simRProd">' +
+        Object.keys(rp).map(function (p) { return '<option>' + esc(p) + '</option>'; }).join('') + '</select></div>' +
+        '<div><label>Resultado</label><select id="simRRes"></select></div>' +
+        '<div><label>Qtd. de retenções</label><input type="number" id="simRQtd" min="0" value="0"></div>';
+    }
+    sim += '</div>';
+
+    openModal('Minha Comissão — ' + esc(atual.mes),
+      '<h4 style="margin:0 0 6px">Composição do saldo</h4>' +
+      '<div class="table-wrap"><table><tbody>' + comissaoLinhas(atual) + '</tbody></table></div>' +
+      (atual.tetoRetencaoAplicado ? '<p class="muted" style="margin-top:6px">⚠️ Teto do Cartão (R$530) aplicado.</p>' : '') +
+      '<h4 style="margin:18px 0 6px">Simulador "e se…"</h4>' +
+      '<p class="muted" style="margin-bottom:8px">Projete o impacto de novos lançamentos na sua comissão. É apenas simulação — <strong>nada é gravado</strong>.</p>' +
+      sim +
+      '<div class="form-actions"><button class="btn" id="btnSim">Simular</button></div>' +
+      '<div id="simResult"></div>');
+
+    // Resultados de retenção dependem do produto escolhido
+    if (hasRet) {
+      const rProd = document.getElementById('simRProd');
+      const rRes = document.getElementById('simRRes');
+      const fill = function () { rRes.innerHTML = rp[rProd.value].map(function (x) { return '<option>' + esc(x) + '</option>'; }).join(''); };
+      rProd.addEventListener('change', fill); fill();
+    }
+
+    document.getElementById('btnSim').addEventListener('click', function (ev) {
+      const payload = { mes: state.month, vendas: [], retencoes: [] };
+      const vq = parseInt(document.getElementById('simVQtd').value, 10) || 0;
+      if (vq > 0) payload.vendas.push({ produto: document.getElementById('simVProd').value, quantidade: vq });
+      if (hasRet) {
+        const rq = parseInt(document.getElementById('simRQtd').value, 10) || 0;
+        if (rq > 0) payload.retencoes.push({ produto: document.getElementById('simRProd').value, resultado: document.getElementById('simRRes').value, quantidade: rq });
+      }
+      if (!payload.vendas.length && !payload.retencoes.length) { toast('Informe ao menos uma quantidade para simular.', true); return; }
+      lockWhile(ev.target, api('commission.simulate', payload).then(function (res) {
+        const up = res.deltaTotal >= 0;
+        document.getElementById('simResult').innerHTML =
+          '<div class="card" style="margin-top:12px"><h4 style="margin:0 0 6px">Comissão simulada</h4>' +
+          '<div class="table-wrap"><table><tbody>' + comissaoLinhas(res.simulada) + '</tbody></table></div>' +
+          '<p style="margin-top:10px;font-size:1.05rem">' + BRL(res.atual.total) + ' → <strong>' + BRL(res.simulada.total) + '</strong> ' +
+          '<span class="badge ' + (up ? 'ok' : 'warn') + '">' + (up ? '+' : '') + BRL(res.deltaTotal) + '</span></p></div>';
+      }).catch(function (e) { toast(e.message, true); }), 'Simulando…');
+    });
   }
 
   /** Modal de criação/edição de usuário. */
@@ -1131,7 +1273,8 @@ const App = (function () {
     userIndicators: userIndicators, goalForm: goalForm, report: report,
     saveSetting: saveSetting, auditRotate: auditRotate, productForm: productForm, productDelete: productDelete,
     teamForm: teamForm, teamDelete: teamDelete,
-    entryDelete: entryDelete, rankingPeriodo: rankingPeriodo
+    entryDelete: entryDelete, entryEdit: entryEdit,
+    rankingPeriodo: rankingPeriodo, commissionModal: commissionModal
   };
 })();
 </script>
